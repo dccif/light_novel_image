@@ -5,6 +5,9 @@ import 'package:fluent_ui/fluent_ui.dart';
 import 'package:go_router/go_router.dart';
 import 'package:photo_view/photo_view.dart';
 import 'package:photo_view/photo_view_gallery.dart';
+import 'package:path/path.dart' as path;
+import 'package:path_provider/path_provider.dart';
+import 'package:flutter/services.dart';
 
 class EpubViewerPage extends StatefulWidget {
   final String epubPath;
@@ -22,17 +25,53 @@ class _EpubViewerPageState extends State<EpubViewerPage> {
   String? _error;
   int _currentIndex = 0;
   final PageController _pageController = PageController();
+  Directory? _tempDir;
 
   @override
   void initState() {
     super.initState();
+    _initTempDir();
     _loadEpubImages();
   }
 
   @override
   void dispose() {
     _pageController.dispose();
+    _cleanupTempFiles();
     super.dispose();
+  }
+
+  Future<void> _initTempDir() async {
+    final tempDir = await getTemporaryDirectory();
+    _tempDir = await Directory(
+      path.join(tempDir.path, 'epub_viewer'),
+    ).create(recursive: true);
+  }
+
+  Future<void> _cleanupTempFiles() async {
+    if (_tempDir != null && await _tempDir!.exists()) {
+      await _tempDir!.delete(recursive: true);
+    }
+  }
+
+  Future<void> _openInSystemViewer() async {
+    if (_tempDir == null || _currentIndex >= _images.length) return;
+
+    final imageName = _imageNames[_currentIndex];
+    final tempFile = File(path.join(_tempDir!.path, imageName));
+
+    if (!await tempFile.exists()) {
+      await tempFile.writeAsBytes(_images[_currentIndex]);
+    }
+
+    // 使用Process.run来打开系统默认的图片查看器
+    if (Platform.isWindows) {
+      await Process.run('explorer.exe', [tempFile.path]);
+    } else if (Platform.isMacOS) {
+      await Process.run('open', [tempFile.path]);
+    } else if (Platform.isLinux) {
+      await Process.run('xdg-open', [tempFile.path]);
+    }
   }
 
   Future<void> _loadEpubImages() async {
@@ -237,26 +276,47 @@ class _EpubViewerPageState extends State<EpubViewerPage> {
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(8),
-        child: PhotoViewGallery.builder(
-          scrollPhysics: const BouncingScrollPhysics(),
-          builder: (BuildContext context, int index) {
-            return PhotoViewGalleryPageOptions(
-              imageProvider: MemoryImage(_images[index]),
-              initialScale: PhotoViewComputedScale.contained,
-              minScale: PhotoViewComputedScale.contained * 0.5,
-              maxScale: PhotoViewComputedScale.covered * 2.0,
-              heroAttributes: PhotoViewHeroAttributes(tag: index),
-            );
+        child: Focus(
+          autofocus: true,
+          onKeyEvent: (node, event) {
+            if (event is KeyDownEvent) {
+              if (event.logicalKey == LogicalKeyboardKey.enter) {
+                _openInSystemViewer();
+                return KeyEventResult.handled;
+              } else if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+                _previousImage();
+                return KeyEventResult.handled;
+              } else if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+                _nextImage();
+                return KeyEventResult.handled;
+              }
+            }
+            return KeyEventResult.ignored;
           },
-          itemCount: _images.length,
-          loadingBuilder: (context, event) =>
-              const Center(child: ProgressRing()),
-          pageController: _pageController,
-          onPageChanged: (index) {
-            setState(() {
-              _currentIndex = index;
-            });
-          },
+          child: GestureDetector(
+            onDoubleTap: _openInSystemViewer,
+            child: PhotoViewGallery.builder(
+              scrollPhysics: const BouncingScrollPhysics(),
+              builder: (BuildContext context, int index) {
+                return PhotoViewGalleryPageOptions(
+                  imageProvider: MemoryImage(_images[index]),
+                  initialScale: PhotoViewComputedScale.contained,
+                  minScale: PhotoViewComputedScale.contained * 0.5,
+                  maxScale: PhotoViewComputedScale.covered * 2.0,
+                  heroAttributes: PhotoViewHeroAttributes(tag: index),
+                );
+              },
+              itemCount: _images.length,
+              loadingBuilder: (context, event) =>
+                  const Center(child: ProgressRing()),
+              pageController: _pageController,
+              onPageChanged: (index) {
+                setState(() {
+                  _currentIndex = index;
+                });
+              },
+            ),
+          ),
         ),
       ),
     );
