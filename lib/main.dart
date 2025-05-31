@@ -20,11 +20,16 @@ void main() async {
 
   if (isDesktop) {
     await flutter_acrylic.Window.initialize();
-    if (defaultTargetPlatform == TargetPlatform.windows) {
-      await flutter_acrylic.Window.hideWindowControls();
-    }
     await WindowManager.instance.ensureInitialized();
-    windowManager.waitUntilReadyToShow().then((_) async {
+
+    final windowOptions = const WindowOptions(
+      size: Size(800, 800),
+      backgroundColor: Colors.transparent,
+      skipTaskbar: false,
+      titleBarStyle: TitleBarStyle.normal,
+    );
+
+    windowManager.waitUntilReadyToShow(windowOptions, () async {
       windowManager.setTitle(appTitle);
       await windowManager.show();
     });

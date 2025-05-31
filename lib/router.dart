@@ -1,5 +1,6 @@
 import 'package:epub_image/home.dart';
 import 'package:epub_image/widges/home_page.dart';
+import 'package:epub_image/widges/epub_viewer_page.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:go_router/go_router.dart';
 
@@ -16,6 +17,16 @@ final router = GoRouter(
       },
       routes: <GoRoute>[
         GoRoute(path: '/', builder: (context, state) => const HomePage()),
+        GoRoute(
+          path: '/epub-viewer',
+          builder: (context, state) {
+            final epubPath = state.uri.queryParameters['path'];
+            if (epubPath == null) {
+              return const Center(child: Text('缺少epub文件路径'));
+            }
+            return EpubViewerPage(epubPath: epubPath);
+          },
+        ),
       ],
     ),
   ],
