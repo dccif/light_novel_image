@@ -146,9 +146,6 @@ class _EpubViewerPageState extends State<EpubViewerPage> {
         // 设置窗口大小
         await windowManager.setSize(Size(finalWidth, finalHeight));
 
-        // 将窗口居中
-        await windowManager.center();
-
         debugPrint('窗口大小已调整为: ${finalWidth.toInt()}x${finalHeight.toInt()}');
         debugPrint(
           '基于图片尺寸: 最大宽度=${recommendedSize.width}, 最大高度=${recommendedSize.height}',
