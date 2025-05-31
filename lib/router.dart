@@ -20,8 +20,13 @@ final router = GoRouter(
         GoRoute(
           path: '/epub-viewer',
           builder: (context, state) {
-            // 通过extra参数直接传递epub文件路径列表
-            final epubPaths = state.extra as List<String>?;
+            // 安全地转换类型：先获取dynamic列表，然后转换为String列表
+            final extraData = state.extra;
+            List<String>? epubPaths;
+
+            if (extraData is List) {
+              epubPaths = extraData.map((e) => e.toString()).toList();
+            }
 
             if (epubPaths == null || epubPaths.isEmpty) {
               return const Center(child: Text('缺少epub文件路径'));

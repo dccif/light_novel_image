@@ -143,7 +143,7 @@ class _EpubViewerPageState extends State<EpubViewerPage> {
       child: Column(
         children: [
           _buildHeader(),
-          const SizedBox(height: 16),
+          const SizedBox(height: 8),
           Expanded(child: _buildContent()),
           if (!_isLoading && _images.isNotEmpty) _buildFooter(),
         ],
@@ -230,7 +230,7 @@ class _EpubViewerPageState extends State<EpubViewerPage> {
 
   Widget _buildFooter() {
     return Padding(
-      padding: const EdgeInsets.only(top: 16),
+      padding: const EdgeInsets.only(top: 12),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
