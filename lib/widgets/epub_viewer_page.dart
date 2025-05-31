@@ -105,6 +105,84 @@ class _EpubViewerPageState extends State<EpubViewerPage> {
     );
   }
 
+  /// 复制当前图片到剪贴板
+  Future<void> _copyToClipboard(String imageName) async {
+    if (_currentIndex >= _images.length) return;
+
+    try {
+      await SystemViewerService.copyFileToClipboard(
+        _images[_currentIndex],
+        imageName,
+      );
+
+      // 显示成功提示
+      if (mounted) {
+        displayInfoBar(
+          context,
+          builder: (context, close) {
+            return InfoBar(
+              title: const Text('成功'),
+              content: Text('图片 "$imageName" 已复制到剪贴板'),
+              severity: InfoBarSeverity.success,
+              action: IconButton(
+                icon: const Icon(FluentIcons.clear),
+                onPressed: close,
+              ),
+            );
+          },
+        );
+      }
+    } catch (e) {
+      // 显示错误提示
+      if (mounted) {
+        displayInfoBar(
+          context,
+          builder: (context, close) {
+            return InfoBar(
+              title: const Text('复制失败'),
+              content: Text('无法复制图片到剪贴板: $e'),
+              severity: InfoBarSeverity.error,
+              action: IconButton(
+                icon: const Icon(FluentIcons.clear),
+                onPressed: close,
+              ),
+            );
+          },
+        );
+      }
+    }
+  }
+
+  /// 显示选择打开方式对话框
+  Future<void> _openWithDialog(String imageName) async {
+    if (_currentIndex >= _images.length) return;
+
+    try {
+      await SystemViewerService.openImageWithDialog(
+        _images[_currentIndex],
+        imageName,
+      );
+    } catch (e) {
+      // 显示错误提示
+      if (mounted) {
+        displayInfoBar(
+          context,
+          builder: (context, close) {
+            return InfoBar(
+              title: const Text('打开失败'),
+              content: Text('无法打开选择应用程序对话框: $e'),
+              severity: InfoBarSeverity.error,
+              action: IconButton(
+                icon: const Icon(FluentIcons.clear),
+                onPressed: close,
+              ),
+            );
+          },
+        );
+      }
+    }
+  }
+
   /// 自动调整窗口大小到推荐尺寸（直接使用最大宽度和最大高度）
   Future<void> _adjustWindowSizeToMostCommonResolution() async {
     if (!kIsWeb && _resolutionStatistics != null) {
@@ -362,12 +440,15 @@ class _EpubViewerPageState extends State<EpubViewerPage> {
 
     return ImageGalleryWidget(
       images: _images,
+      imageNames: _imageNames,
       pageController: _pageController,
       currentIndex: _currentIndex,
       onPageChanged: _onPageChanged,
       onOpenInSystemViewer: _openInSystemViewer,
       onPreviousImage: _previousImage,
       onNextImage: _nextImage,
+      onCopyToClipboard: _copyToClipboard,
+      onOpenWithDialog: _openWithDialog,
     );
   }
 
