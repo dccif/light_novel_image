@@ -1,5 +1,5 @@
 import 'dart:io';
-import 'dart:typed_data';
+import 'dart:convert';
 import 'package:archive/archive.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:go_router/go_router.dart';
@@ -8,6 +8,139 @@ import 'package:photo_view/photo_view_gallery.dart';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/foundation.dart';
+import 'package:xml/xml.dart';
+
+// 后台处理的数据结构
+class EpubParseResult {
+  final String title;
+  final List<Uint8List> images;
+  final List<String> imageNames;
+
+  EpubParseResult({
+    required this.title,
+    required this.images,
+    required this.imageNames,
+  });
+}
+
+// 安全地将字节转换为UTF-8字符串
+String _safeDecodeBytes(List<int> bytes) {
+  try {
+    return utf8.decode(bytes);
+  } catch (e) {
+    // 如果UTF-8解码失败，尝试使用latin1
+    try {
+      return latin1.decode(bytes);
+    } catch (e2) {
+      // 最后的后备方案
+      return String.fromCharCodes(bytes);
+    }
+  }
+}
+
+// 后台解析函数 - 在isolate中运行
+Future<EpubParseResult> _parseEpubInBackground(String epubPath) async {
+  final bytes = await File(epubPath).readAsBytes();
+  final archive = ZipDecoder().decodeBytes(bytes);
+
+  // 提取标题
+  String title = path.basenameWithoutExtension(epubPath); // 默认标题
+
+  try {
+    // 首先尝试在根目录和META-INF目录下查找container.xml
+    final containerFile =
+        archive.findFile('container.xml') ??
+        archive.findFile('META-INF/container.xml');
+
+    if (containerFile != null) {
+      final containerContent = _safeDecodeBytes(
+        containerFile.content as List<int>,
+      );
+      final containerDoc = XmlDocument.parse(containerContent);
+
+      // 获取OPF文件路径
+      final rootfileElements = containerDoc.findAllElements('rootfile');
+      for (final element in rootfileElements) {
+        if (element.getAttribute('media-type') ==
+            'application/oebps-package+xml') {
+          final opfPath = element.getAttribute('full-path');
+          if (opfPath != null) {
+            final opfFile = archive.findFile(opfPath);
+            if (opfFile != null) {
+              final opfContent = _safeDecodeBytes(opfFile.content as List<int>);
+              final opfDoc = XmlDocument.parse(opfContent);
+
+              // 尝试获取标题
+              final titleElements = opfDoc.findAllElements('dc:title');
+              if (titleElements.isNotEmpty) {
+                final extractedTitle = titleElements.first.innerText.trim();
+                if (extractedTitle.isNotEmpty) {
+                  title = extractedTitle;
+                  break;
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+
+    // 如果上述方法失败，直接搜索所有文件中的.opf文件
+    if (title == path.basenameWithoutExtension(epubPath)) {
+      for (final file in archive.files) {
+        if (file.name.toLowerCase().endsWith('.opf')) {
+          final content = _safeDecodeBytes(file.content as List<int>);
+          try {
+            final doc = XmlDocument.parse(content);
+            final titleElements = doc.findAllElements('dc:title');
+            if (titleElements.isNotEmpty) {
+              final extractedTitle = titleElements.first.innerText.trim();
+              if (extractedTitle.isNotEmpty) {
+                title = extractedTitle;
+                break;
+              }
+            }
+          } catch (e) {
+            // 忽略解析错误，继续查找其他文件
+            continue;
+          }
+        }
+      }
+    }
+  } catch (e) {
+    // 如果发生任何错误，保持默认标题
+    debugPrint('提取标题时发生错误: $e');
+  }
+
+  // 提取图片
+  List<Uint8List> images = [];
+  List<String> imageNames = [];
+
+  // 常见的图片文件扩展名
+  final imageExtensions = {'.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'};
+
+  for (final file in archive) {
+    if (file.isFile) {
+      final fileName = file.name.toLowerCase();
+      if (imageExtensions.any((ext) => fileName.endsWith(ext))) {
+        final content = file.content as List<int>;
+        images.add(Uint8List.fromList(content));
+        imageNames.add(file.name.split('/').last);
+      }
+    }
+  }
+
+  // 按文件名排序
+  final indexed = List.generate(images.length, (i) => i);
+  indexed.sort((a, b) => imageNames[a].compareTo(imageNames[b]));
+
+  return EpubParseResult(
+    title: title,
+    images: indexed.map((i) => images[i]).toList(),
+    imageNames: indexed.map((i) => imageNames[i]).toList(),
+  );
+}
 
 class EpubViewerPage extends StatefulWidget {
   final String epubPath;
@@ -26,6 +159,7 @@ class _EpubViewerPageState extends State<EpubViewerPage> {
   int _currentIndex = 0;
   final PageController _pageController = PageController();
   Directory? _tempDir;
+  String _bookTitle = '';
 
   @override
   void initState() {
@@ -65,58 +199,39 @@ class _EpubViewerPageState extends State<EpubViewerPage> {
     }
 
     // 使用Process.run来打开系统默认的图片查看器
-    if (Platform.isWindows) {
-      await Process.run('explorer.exe', [tempFile.path]);
-    } else if (Platform.isMacOS) {
-      await Process.run('open', [tempFile.path]);
-    } else if (Platform.isLinux) {
-      await Process.run('xdg-open', [tempFile.path]);
+    try {
+      if (Platform.isWindows) {
+        await Process.run('explorer.exe', [tempFile.path]);
+      } else if (Platform.isMacOS) {
+        await Process.run('open', [tempFile.path]);
+      } else if (Platform.isLinux) {
+        await Process.run('xdg-open', [tempFile.path]);
+      }
+    } catch (e) {
+      debugPrint('打开系统图片查看器失败: $e');
     }
   }
 
   Future<void> _loadEpubImages() async {
     try {
-      final bytes = await File(widget.epubPath).readAsBytes();
-      final archive = ZipDecoder().decodeBytes(bytes);
+      // 在后台线程中解析EPUB文件
+      final result = await compute(_parseEpubInBackground, widget.epubPath);
 
-      List<Uint8List> images = [];
-      List<String> imageNames = [];
-
-      // 常见的图片文件扩展名
-      final imageExtensions = {
-        '.jpg',
-        '.jpeg',
-        '.png',
-        '.gif',
-        '.bmp',
-        '.webp',
-      };
-
-      for (final file in archive) {
-        if (file.isFile) {
-          final fileName = file.name.toLowerCase();
-          if (imageExtensions.any((ext) => fileName.endsWith(ext))) {
-            final content = file.content as List<int>;
-            images.add(Uint8List.fromList(content));
-            imageNames.add(file.name.split('/').last);
-          }
-        }
+      if (mounted) {
+        setState(() {
+          _bookTitle = result.title;
+          _images = result.images;
+          _imageNames = result.imageNames;
+          _isLoading = false;
+        });
       }
-
-      // 按文件名排序
-      final indexed = List.generate(images.length, (i) => i);
-      indexed.sort((a, b) => imageNames[a].compareTo(imageNames[b]));
-
-      setState(() {
-        _images = indexed.map((i) => images[i]).toList();
-        _imageNames = indexed.map((i) => imageNames[i]).toList();
-        _isLoading = false;
-      });
     } catch (e) {
-      setState(() {
-        _error = '加载失败: $e';
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _error = '加载失败: $e';
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -150,28 +265,27 @@ class _EpubViewerPageState extends State<EpubViewerPage> {
         children: [
           // 头部工具栏
           Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              Row(
-                children: [
-                  Button(
-                    onPressed: () => context.go('/'),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(FluentIcons.back),
-                        SizedBox(width: 8),
-                        Text('返回'),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Text(
-                    'Epub 图片浏览器',
-                    style: FluentTheme.of(context).typography.subtitle,
-                  ),
-                ],
+              Button(
+                onPressed: () => context.go('/'),
+                child: const Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Icon(FluentIcons.back),
+                    SizedBox(width: 8),
+                    Text('返回'),
+                  ],
+                ),
               ),
+              const SizedBox(width: 16),
+              Expanded(
+                child: Text(
+                  _bookTitle,
+                  style: FluentTheme.of(context).typography.subtitle,
+                  overflow: TextOverflow.ellipsis,
+                ),
+              ),
+              const SizedBox(width: 16),
               if (!_isLoading && _images.isNotEmpty)
                 Text(
                   '${_currentIndex + 1} / ${_images.length}',
