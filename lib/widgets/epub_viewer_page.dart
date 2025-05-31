@@ -99,9 +99,16 @@ class _EpubViewerPageState extends State<EpubViewerPage> {
   Future<void> _openInSystemViewer() async {
     if (_currentIndex >= _images.length) return;
 
+    // 获取当前书籍标识符
+    String? bookIdentifier;
+    if (_books.isNotEmpty && _currentBookIndex < _books.length) {
+      bookIdentifier = _books[_currentBookIndex].title;
+    }
+
     await SystemViewerService.openImageInSystemViewer(
       _images[_currentIndex],
       _imageNames[_currentIndex],
+      bookIdentifier,
     );
   }
 
@@ -109,10 +116,17 @@ class _EpubViewerPageState extends State<EpubViewerPage> {
   Future<void> _copyToClipboard(String imageName) async {
     if (_currentIndex >= _images.length) return;
 
+    // 获取当前书籍标识符
+    String? bookIdentifier;
+    if (_books.isNotEmpty && _currentBookIndex < _books.length) {
+      bookIdentifier = _books[_currentBookIndex].title;
+    }
+
     try {
       await SystemViewerService.copyFileToClipboard(
         _images[_currentIndex],
         imageName,
+        bookIdentifier,
       );
 
       // 显示成功提示
@@ -157,10 +171,17 @@ class _EpubViewerPageState extends State<EpubViewerPage> {
   Future<void> _openWithDialog(String imageName) async {
     if (_currentIndex >= _images.length) return;
 
+    // 获取当前书籍标识符
+    String? bookIdentifier;
+    if (_books.isNotEmpty && _currentBookIndex < _books.length) {
+      bookIdentifier = _books[_currentBookIndex].title;
+    }
+
     try {
       await SystemViewerService.openImageWithDialog(
         _images[_currentIndex],
         imageName,
+        bookIdentifier,
       );
     } catch (e) {
       // 显示错误提示

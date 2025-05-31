@@ -1,8 +1,8 @@
 import 'dart:io';
 import 'package:flutter/foundation.dart';
-import 'package:flutter/services.dart';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
+import 'package:window_manager/window_manager.dart';
 
 class SystemViewerService {
   static Directory? _tempDir;
@@ -27,19 +27,34 @@ class SystemViewerService {
   }
 
   /// 获取临时文件路径
-  static Future<String> _getTempFilePath(String imageName) async {
+  static Future<String> _getTempFilePath(
+    String imageName, [
+    String? bookIdentifier,
+  ]) async {
     if (_tempDir == null) {
       await initTempDir();
     }
-    return path.join(_tempDir!.path, imageName);
+
+    // 如果提供了书籍标识符，添加到文件名前面
+    String fileName = imageName;
+    if (bookIdentifier != null && bookIdentifier.isNotEmpty) {
+      // 清理书籍标识符，移除不合法的文件名字符
+      final cleanBookId = bookIdentifier
+          .replaceAll(RegExp(r'[<>:"/\\|?*]'), '_')
+          .replaceAll(RegExp(r'\s+'), '_');
+      fileName = '${cleanBookId}_$imageName';
+    }
+
+    return path.join(_tempDir!.path, fileName);
   }
 
   /// 确保临时文件存在
   static Future<String> _ensureTempFileExists(
     Uint8List imageData,
-    String imageName,
-  ) async {
-    final tempFilePath = await _getTempFilePath(imageName);
+    String imageName, [
+    String? bookIdentifier,
+  ]) async {
+    final tempFilePath = await _getTempFilePath(imageName, bookIdentifier);
     final tempFile = File(tempFilePath);
 
     if (!await tempFile.exists()) {
@@ -52,10 +67,15 @@ class SystemViewerService {
   /// 复制文件到剪贴板
   static Future<void> copyFileToClipboard(
     Uint8List imageData,
-    String imageName,
-  ) async {
+    String imageName, [
+    String? bookIdentifier,
+  ]) async {
     try {
-      final tempFilePath = await _ensureTempFileExists(imageData, imageName);
+      final tempFilePath = await _ensureTempFileExists(
+        imageData,
+        imageName,
+        bookIdentifier,
+      );
 
       if (Platform.isWindows) {
         // Windows: 使用 PowerShell 复制文件到剪贴板
@@ -107,10 +127,28 @@ class SystemViewerService {
   /// 在系统图片查看器中打开图片（默认应用）
   static Future<void> openImageInSystemViewer(
     Uint8List imageData,
-    String imageName,
-  ) async {
+    String imageName, [
+    String? bookIdentifier,
+  ]) async {
     try {
-      final tempFilePath = await _ensureTempFileExists(imageData, imageName);
+      final tempFilePath = await _ensureTempFileExists(
+        imageData,
+        imageName,
+        bookIdentifier,
+      );
+
+      // 在调用外部应用之前，强制让当前窗口后置
+      if (!kIsWeb) {
+        try {
+          // 先确保窗口不在最顶层
+          await windowManager.setAlwaysOnTop(false);
+
+          // 让窗口失去焦点并后置
+          await windowManager.blur();
+        } catch (e) {
+          debugPrint('窗口后置失败: $e');
+        }
+      }
 
       if (Platform.isWindows) {
         await Process.run('explorer.exe', [tempFilePath]);
@@ -130,10 +168,28 @@ class SystemViewerService {
   /// 显示"打开方式"对话框
   static Future<void> openImageWithDialog(
     Uint8List imageData,
-    String imageName,
-  ) async {
+    String imageName, [
+    String? bookIdentifier,
+  ]) async {
     try {
-      final tempFilePath = await _ensureTempFileExists(imageData, imageName);
+      final tempFilePath = await _ensureTempFileExists(
+        imageData,
+        imageName,
+        bookIdentifier,
+      );
+
+      // 在调用外部应用之前，强制让当前窗口后置
+      if (!kIsWeb) {
+        try {
+          // 先确保窗口不在最顶层
+          await windowManager.setAlwaysOnTop(false);
+
+          // 让窗口失去焦点并后置
+          await windowManager.blur();
+        } catch (e) {
+          debugPrint('窗口后置失败: $e');
+        }
+      }
 
       if (Platform.isWindows) {
         // Windows: 使用 rundll32 显示"打开方式"对话框
@@ -161,7 +217,7 @@ class SystemViewerService {
     } catch (e) {
       debugPrint('显示打开方式对话框失败: $e');
       // 如果失败，回退到默认打开方式
-      await openImageInSystemViewer(imageData, imageName);
+      await openImageInSystemViewer(imageData, imageName, bookIdentifier);
     }
   }
 }
