@@ -20,11 +20,14 @@ final router = GoRouter(
         GoRoute(
           path: '/epub-viewer',
           builder: (context, state) {
-            final epubPath = state.uri.queryParameters['path'];
-            if (epubPath == null) {
+            // 通过extra参数直接传递epub文件路径列表
+            final epubPaths = state.extra as List<String>?;
+
+            if (epubPaths == null || epubPaths.isEmpty) {
               return const Center(child: Text('缺少epub文件路径'));
             }
-            return EpubViewerPage(epubPath: epubPath);
+
+            return EpubViewerPage(epubPaths: epubPaths);
           },
         ),
       ],

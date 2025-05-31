@@ -22,11 +22,9 @@ class _HomePageState extends State<HomePage> {
     final epubFiles = files.where((file) => _isEpubFile(file.name)).toList();
 
     if (epubFiles.isNotEmpty) {
-      // 如果有epub文件，打开第一个epub文件
-      final firstEpubFile = epubFiles.first;
-      context.go(
-        '/epub-viewer?path=${Uri.encodeComponent(firstEpubFile.path)}',
-      );
+      // 如果有epub文件，直接传递所有epub文件路径
+      final epubPaths = epubFiles.map((file) => file.path).toList();
+      context.go('/epub-viewer', extra: epubPaths);
     } else {
       // 如果没有epub文件，按原来的逻辑添加到列表
       setState(() {
@@ -151,7 +149,8 @@ class _HomePageState extends State<HomePage> {
                                         Button(
                                           onPressed: () {
                                             context.go(
-                                              '/epub-viewer?path=${Uri.encodeComponent(item.path)}',
+                                              '/epub-viewer',
+                                              extra: [item.path],
                                             );
                                           },
                                           child: const Text('打开'),

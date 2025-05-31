@@ -1,5 +1,6 @@
 import 'dart:io';
 import 'dart:convert';
+import 'dart:typed_data';
 import 'package:archive/archive.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:go_router/go_router.dart';
@@ -13,14 +14,30 @@ import 'package:xml/xml.dart';
 
 // 后台处理的数据结构
 class EpubParseResult {
-  final String title;
-  final List<Uint8List> images;
-  final List<String> imageNames;
+  final List<BookInfo> books;
+  final List<Uint8List> allImages;
+  final List<String> allImageNames;
+  final List<int> imageBookIndexes; // 每张图片属于哪本书
 
   EpubParseResult({
+    required this.books,
+    required this.allImages,
+    required this.allImageNames,
+    required this.imageBookIndexes,
+  });
+}
+
+class BookInfo {
+  final String title;
+  final String filePath;
+  final int startImageIndex;
+  final int endImageIndex;
+
+  BookInfo({
     required this.title,
-    required this.images,
-    required this.imageNames,
+    required this.filePath,
+    required this.startImageIndex,
+    required this.endImageIndex,
   });
 }
 
@@ -39,14 +56,8 @@ String _safeDecodeBytes(List<int> bytes) {
   }
 }
 
-// 后台解析函数 - 在isolate中运行
-Future<EpubParseResult> _parseEpubInBackground(String epubPath) async {
-  final bytes = await File(epubPath).readAsBytes();
-  final archive = ZipDecoder().decodeBytes(bytes);
-
-  // 提取标题
-  String title = path.basenameWithoutExtension(epubPath); // 默认标题
-
+// 从单个epub文件提取标题
+String _extractTitleFromArchive(Archive archive, String filePath) {
   try {
     // 首先尝试在根目录和META-INF目录下查找container.xml
     final containerFile =
@@ -76,8 +87,7 @@ Future<EpubParseResult> _parseEpubInBackground(String epubPath) async {
               if (titleElements.isNotEmpty) {
                 final extractedTitle = titleElements.first.innerText.trim();
                 if (extractedTitle.isNotEmpty) {
-                  title = extractedTitle;
-                  break;
+                  return extractedTitle;
                 }
               }
             }
@@ -87,65 +97,123 @@ Future<EpubParseResult> _parseEpubInBackground(String epubPath) async {
     }
 
     // 如果上述方法失败，直接搜索所有文件中的.opf文件
-    if (title == path.basenameWithoutExtension(epubPath)) {
-      for (final file in archive.files) {
-        if (file.name.toLowerCase().endsWith('.opf')) {
-          final content = _safeDecodeBytes(file.content as List<int>);
-          try {
-            final doc = XmlDocument.parse(content);
-            final titleElements = doc.findAllElements('dc:title');
-            if (titleElements.isNotEmpty) {
-              final extractedTitle = titleElements.first.innerText.trim();
-              if (extractedTitle.isNotEmpty) {
-                title = extractedTitle;
-                break;
-              }
+    for (final file in archive.files) {
+      if (file.name.toLowerCase().endsWith('.opf')) {
+        final content = _safeDecodeBytes(file.content as List<int>);
+        try {
+          final doc = XmlDocument.parse(content);
+          final titleElements = doc.findAllElements('dc:title');
+          if (titleElements.isNotEmpty) {
+            final extractedTitle = titleElements.first.innerText.trim();
+            if (extractedTitle.isNotEmpty) {
+              return extractedTitle;
             }
-          } catch (e) {
-            // 忽略解析错误，继续查找其他文件
-            continue;
           }
+        } catch (e) {
+          continue;
         }
       }
     }
   } catch (e) {
-    // 如果发生任何错误，保持默认标题
     debugPrint('提取标题时发生错误: $e');
   }
 
-  // 提取图片
-  List<Uint8List> images = [];
-  List<String> imageNames = [];
+  return path.basenameWithoutExtension(filePath);
+}
+
+// 后台解析函数 - 在isolate中运行
+Future<EpubParseResult> _parseMultipleEpubsInBackground(
+  List<String> epubPaths,
+) async {
+  List<BookInfo> books = [];
+  List<Uint8List> allImages = [];
+  List<String> allImageNames = [];
+  List<int> imageBookIndexes = [];
 
   // 常见的图片文件扩展名
   final imageExtensions = {'.jpg', '.jpeg', '.png', '.gif', '.bmp', '.webp'};
 
-  for (final file in archive) {
-    if (file.isFile) {
-      final fileName = file.name.toLowerCase();
-      if (imageExtensions.any((ext) => fileName.endsWith(ext))) {
-        final content = file.content as List<int>;
-        images.add(Uint8List.fromList(content));
-        imageNames.add(file.name.split('/').last);
+  for (int bookIndex = 0; bookIndex < epubPaths.length; bookIndex++) {
+    final epubPath = epubPaths[bookIndex];
+
+    try {
+      final bytes = await File(epubPath).readAsBytes();
+      final archive = ZipDecoder().decodeBytes(bytes);
+
+      // 提取标题
+      final title = _extractTitleFromArchive(archive, epubPath);
+
+      // 记录这本书的图片开始索引
+      final startImageIndex = allImages.length;
+
+      // 提取图片
+      List<Uint8List> bookImages = [];
+      List<String> bookImageNames = [];
+
+      for (final file in archive) {
+        if (file.isFile) {
+          final fileName = file.name.toLowerCase();
+          if (imageExtensions.any((ext) => fileName.endsWith(ext))) {
+            final content = file.content as List<int>;
+            bookImages.add(Uint8List.fromList(content));
+            bookImageNames.add(file.name.split('/').last);
+          }
+        }
       }
+
+      // 按文件名排序
+      final indexed = List.generate(bookImages.length, (i) => i);
+      indexed.sort((a, b) => bookImageNames[a].compareTo(bookImageNames[b]));
+
+      final sortedImages = indexed.map((i) => bookImages[i]).toList();
+      final sortedImageNames = indexed.map((i) => bookImageNames[i]).toList();
+
+      // 添加到总的图片列表
+      allImages.addAll(sortedImages);
+      allImageNames.addAll(sortedImageNames);
+
+      // 记录每张图片属于哪本书
+      for (int i = 0; i < sortedImages.length; i++) {
+        imageBookIndexes.add(bookIndex);
+      }
+
+      // 记录这本书的图片结束索引
+      final endImageIndex = allImages.length - 1;
+
+      books.add(
+        BookInfo(
+          title: title,
+          filePath: epubPath,
+          startImageIndex: startImageIndex,
+          endImageIndex: endImageIndex,
+        ),
+      );
+    } catch (e) {
+      debugPrint('解析epub文件失败: $epubPath, 错误: $e');
+      // 如果某个文件解析失败，添加一个错误记录
+      books.add(
+        BookInfo(
+          title: '${path.basenameWithoutExtension(epubPath)} (解析失败)',
+          filePath: epubPath,
+          startImageIndex: allImages.length,
+          endImageIndex: allImages.length - 1,
+        ),
+      );
     }
   }
 
-  // 按文件名排序
-  final indexed = List.generate(images.length, (i) => i);
-  indexed.sort((a, b) => imageNames[a].compareTo(imageNames[b]));
-
   return EpubParseResult(
-    title: title,
-    images: indexed.map((i) => images[i]).toList(),
-    imageNames: indexed.map((i) => imageNames[i]).toList(),
+    books: books,
+    allImages: allImages,
+    allImageNames: allImageNames,
+    imageBookIndexes: imageBookIndexes,
   );
 }
 
 class EpubViewerPage extends StatefulWidget {
-  final String epubPath;
+  final List<String> epubPaths;
 
-  const EpubViewerPage({super.key, required this.epubPath});
+  const EpubViewerPage({super.key, required this.epubPaths});
 
   @override
   State<EpubViewerPage> createState() => _EpubViewerPageState();
@@ -154,12 +222,14 @@ class EpubViewerPage extends StatefulWidget {
 class _EpubViewerPageState extends State<EpubViewerPage> {
   List<Uint8List> _images = [];
   List<String> _imageNames = [];
+  List<BookInfo> _books = [];
+  List<int> _imageBookIndexes = [];
   bool _isLoading = true;
   String? _error;
   int _currentIndex = 0;
+  int _currentBookIndex = 0;
   final PageController _pageController = PageController();
   Directory? _tempDir;
-  String _bookTitle = '';
 
   @override
   void initState() {
@@ -188,6 +258,29 @@ class _EpubViewerPageState extends State<EpubViewerPage> {
     }
   }
 
+  String get _currentBookTitle {
+    if (_books.isEmpty || _currentBookIndex >= _books.length) {
+      return '';
+    }
+    final totalBooks = _books.length;
+    if (totalBooks > 1) {
+      return '${_books[_currentBookIndex].title} (${_currentBookIndex + 1}/$totalBooks)';
+    }
+    return _books[_currentBookIndex].title;
+  }
+
+  void _updateCurrentBook() {
+    if (_imageBookIndexes.isNotEmpty &&
+        _currentIndex < _imageBookIndexes.length) {
+      final newBookIndex = _imageBookIndexes[_currentIndex];
+      if (newBookIndex != _currentBookIndex) {
+        setState(() {
+          _currentBookIndex = newBookIndex;
+        });
+      }
+    }
+  }
+
   Future<void> _openInSystemViewer() async {
     if (_tempDir == null || _currentIndex >= _images.length) return;
 
@@ -198,7 +291,6 @@ class _EpubViewerPageState extends State<EpubViewerPage> {
       await tempFile.writeAsBytes(_images[_currentIndex]);
     }
 
-    // 使用Process.run来打开系统默认的图片查看器
     try {
       if (Platform.isWindows) {
         await Process.run('explorer.exe', [tempFile.path]);
@@ -214,14 +306,21 @@ class _EpubViewerPageState extends State<EpubViewerPage> {
 
   Future<void> _loadEpubImages() async {
     try {
-      // 在后台线程中解析EPUB文件
-      final result = await compute(_parseEpubInBackground, widget.epubPath);
+      // 在后台线程中解析所有EPUB文件
+      final result = await compute(
+        _parseMultipleEpubsInBackground,
+        widget.epubPaths,
+      );
 
       if (mounted) {
         setState(() {
-          _bookTitle = result.title;
-          _images = result.images;
-          _imageNames = result.imageNames;
+          _books = result.books;
+          _images = result.allImages;
+          _imageNames = result.allImageNames;
+          _imageBookIndexes = result.imageBookIndexes;
+          _currentBookIndex = _imageBookIndexes.isNotEmpty
+              ? _imageBookIndexes[0]
+              : 0;
           _isLoading = false;
         });
       }
@@ -243,6 +342,7 @@ class _EpubViewerPageState extends State<EpubViewerPage> {
         duration: const Duration(milliseconds: 300),
         curve: Curves.easeInOut,
       );
+      _updateCurrentBook();
     }
   }
 
@@ -254,6 +354,7 @@ class _EpubViewerPageState extends State<EpubViewerPage> {
         duration: const Duration(milliseconds: 300),
         curve: Curves.easeInOut,
       );
+      _updateCurrentBook();
     }
   }
 
@@ -280,7 +381,7 @@ class _EpubViewerPageState extends State<EpubViewerPage> {
               const SizedBox(width: 16),
               Expanded(
                 child: Text(
-                  _bookTitle,
+                  _currentBookTitle,
                   style: FluentTheme.of(context).typography.subtitle,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -376,7 +477,7 @@ class _EpubViewerPageState extends State<EpubViewerPage> {
           children: [
             Icon(FluentIcons.photo2, size: 48),
             SizedBox(height: 16),
-            Text('此epub文件中没有找到图片'),
+            Text('所选epub文件中没有找到图片'),
           ],
         ),
       );
@@ -428,6 +529,7 @@ class _EpubViewerPageState extends State<EpubViewerPage> {
                 setState(() {
                   _currentIndex = index;
                 });
+                _updateCurrentBook();
               },
             ),
           ),
