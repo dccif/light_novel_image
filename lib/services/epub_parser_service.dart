@@ -6,6 +6,7 @@ import 'package:path/path.dart' as path;
 import 'package:xml/xml.dart';
 import 'package:epub_image/models/book_info.dart';
 import 'package:epub_image/models/epub_parse_result.dart';
+import 'package:epub_image/models/image_resolution.dart';
 
 class EpubParserService {
   static const Set<String> _imageExtensions = {
@@ -30,6 +31,53 @@ class EpubParserService {
         return String.fromCharCodes(bytes);
       }
     }
+  }
+
+  /// 统计分辨率信息
+  static ResolutionStatistics _calculateResolutionStatistics(
+    List<ImageResolution> resolutions,
+  ) {
+    final Map<ImageResolution, int> resolutionCounts = {};
+    int maxWidth = 0;
+    int maxHeight = 0;
+
+    for (final resolution in resolutions) {
+      resolutionCounts[resolution] = (resolutionCounts[resolution] ?? 0) + 1;
+
+      // 计算最大宽度和高度
+      if (resolution.width > maxWidth) {
+        maxWidth = resolution.width;
+      }
+      if (resolution.height > maxHeight) {
+        maxHeight = resolution.height;
+      }
+    }
+
+    if (resolutionCounts.isEmpty) {
+      return const ResolutionStatistics(
+        resolutionCounts: {},
+        mostCommonResolution: null,
+        mostCommonResolutionCount: 0,
+        maxWidth: 800,
+        maxHeight: 600,
+      );
+    }
+
+    // 找到最常见的分辨率
+    MapEntry<ImageResolution, int>? mostCommon;
+    for (final entry in resolutionCounts.entries) {
+      if (mostCommon == null || entry.value > mostCommon.value) {
+        mostCommon = entry;
+      }
+    }
+
+    return ResolutionStatistics(
+      resolutionCounts: resolutionCounts,
+      mostCommonResolution: mostCommon?.key,
+      mostCommonResolutionCount: mostCommon?.value ?? 0,
+      maxWidth: maxWidth,
+      maxHeight: maxHeight,
+    );
   }
 
   /// 从单个epub文件提取标题
@@ -100,9 +148,9 @@ class EpubParserService {
   }
 
   /// 从Archive中提取图片
-  static List<MapEntry<Uint8List, String>> _extractImagesFromArchive(
+  static Future<List<MapEntry<Uint8List, String>>> _extractImagesFromArchive(
     Archive archive,
-  ) {
+  ) async {
     final images = <MapEntry<Uint8List, String>>[];
 
     for (final file in archive) {
@@ -136,7 +184,7 @@ class EpubParserService {
       final title = _extractTitleFromArchive(archive, epubPath);
 
       // 提取图片
-      final images = _extractImagesFromArchive(archive);
+      final images = await _extractImagesFromArchive(archive);
 
       final bookInfo = BookInfo(
         title: title,
@@ -161,7 +209,7 @@ class EpubParserService {
     }
   }
 
-  /// 后台解析函数 - 在isolate中运行
+  /// 后台解析函数 - 在isolate中运行（不包含分辨率获取）
   static Future<EpubParseResult> parseMultipleEpubs(
     List<String> epubPaths,
   ) async {
@@ -191,11 +239,30 @@ class EpubParserService {
       }
     }
 
+    // 创建空的分辨率列表和统计信息，将在主线程中填充
+    final imageResolutions = <ImageResolution>[];
+    const resolutionStatistics = ResolutionStatistics(
+      resolutionCounts: {},
+      mostCommonResolution: null,
+      mostCommonResolutionCount: 0,
+      maxWidth: 0,
+      maxHeight: 0,
+    );
+
     return EpubParseResult(
       books: books,
       allImages: allImages,
       allImageNames: allImageNames,
       imageBookIndexes: imageBookIndexes,
+      imageResolutions: imageResolutions,
+      resolutionStatistics: resolutionStatistics,
     );
+  }
+
+  /// 统计分辨率信息（在主线程中调用）
+  static ResolutionStatistics calculateResolutionStatistics(
+    List<ImageResolution> resolutions,
+  ) {
+    return _calculateResolutionStatistics(resolutions);
   }
 }

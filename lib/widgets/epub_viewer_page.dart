@@ -1,8 +1,11 @@
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter/foundation.dart';
+import 'package:window_manager/window_manager.dart';
 import 'package:epub_image/models/book_info.dart';
+import 'package:epub_image/models/image_resolution.dart';
 import 'package:epub_image/services/epub_parser_service.dart';
+import 'package:epub_image/services/image_resolution_service.dart';
 import 'package:epub_image/services/system_viewer_service.dart';
 import 'package:epub_image/widgets/image_gallery_widget.dart';
 
@@ -20,7 +23,9 @@ class _EpubViewerPageState extends State<EpubViewerPage> {
   List<String> _imageNames = [];
   List<BookInfo> _books = [];
   List<int> _imageBookIndexes = [];
+  ResolutionStatistics? _resolutionStatistics;
   bool _isLoading = true;
+  bool _isAnalyzingResolutions = false;
   String? _error;
   int _currentIndex = 0;
   int _currentBookIndex = 0;
@@ -50,9 +55,33 @@ class _EpubViewerPageState extends State<EpubViewerPage> {
     }
     final totalBooks = _books.length;
     if (totalBooks > 1) {
-      return '${_books[_currentBookIndex].title} (${_currentBookIndex + 1}/$totalBooks)';
+      String title =
+          '${_books[_currentBookIndex].title} (${_currentBookIndex + 1}/$totalBooks)';
+
+      // 添加分辨率统计信息
+      if (_resolutionStatistics != null &&
+          _resolutionStatistics!.mostCommonResolution != null) {
+        final stats = _resolutionStatistics!;
+        title +=
+            ' - 最常见: ${stats.mostCommonResolution} (${stats.mostCommonResolutionCount}张)';
+        title += ' | 最大尺寸: ${stats.maxWidth}x${stats.maxHeight}';
+      }
+
+      return title;
     }
-    return _books[_currentBookIndex].title;
+
+    String title = _books[_currentBookIndex].title;
+
+    // 添加分辨率统计信息
+    if (_resolutionStatistics != null &&
+        _resolutionStatistics!.mostCommonResolution != null) {
+      final stats = _resolutionStatistics!;
+      title +=
+          ' - 最常见: ${stats.mostCommonResolution} (${stats.mostCommonResolutionCount}张)';
+      title += ' | 最大尺寸: ${stats.maxWidth}x${stats.maxHeight}';
+    }
+
+    return title;
   }
 
   void _updateCurrentBook() {
@@ -76,6 +105,113 @@ class _EpubViewerPageState extends State<EpubViewerPage> {
     );
   }
 
+  /// 自动调整窗口大小到推荐尺寸（直接使用最大宽度和最大高度）
+  Future<void> _adjustWindowSizeToMostCommonResolution() async {
+    if (!kIsWeb && _resolutionStatistics != null) {
+      final recommendedSize = _resolutionStatistics!.recommendedWindowSize;
+
+      // 添加一些边距来容纳UI元素（头部、页脚等）
+      const double headerHeight = 60; // 头部高度
+      const double footerHeight = 60; // 页脚高度
+      const double padding = 32; // 左右边距
+
+      final windowWidth = recommendedSize.width.toDouble() + padding;
+      final windowHeight =
+          recommendedSize.height.toDouble() +
+          headerHeight +
+          footerHeight +
+          padding;
+
+      try {
+        // 尝试获取屏幕的真实分辨率
+        final mediaData = MediaQuery.of(context);
+        final screenWidth = mediaData.size.width * mediaData.devicePixelRatio;
+        final screenHeight = mediaData.size.height * mediaData.devicePixelRatio;
+
+        // 使用屏幕的90%作为最大窗口尺寸，保留一些边距
+        final double maxAllowedWidth = screenWidth * 0.9;
+        final double maxAllowedHeight = screenHeight * 0.9;
+
+        // 确保有合理的最小和最大限制
+        final double screenLimitWidth = maxAllowedWidth > 800
+            ? maxAllowedWidth
+            : 1920;
+        final double screenLimitHeight = maxAllowedHeight > 600
+            ? maxAllowedHeight
+            : 1080;
+
+        final finalWidth = windowWidth.clamp(400.0, screenLimitWidth);
+        final finalHeight = windowHeight.clamp(300.0, screenLimitHeight);
+
+        // 设置窗口大小
+        await windowManager.setSize(Size(finalWidth, finalHeight));
+
+        // 将窗口居中
+        await windowManager.center();
+
+        debugPrint('窗口大小已调整为: ${finalWidth.toInt()}x${finalHeight.toInt()}');
+        debugPrint(
+          '基于图片尺寸: 最大宽度=${recommendedSize.width}, 最大高度=${recommendedSize.height}',
+        );
+        debugPrint(
+          '屏幕分辨率: ${screenWidth.toInt()}x${screenHeight.toInt()}, 限制: ${screenLimitWidth.toInt()}x${screenLimitHeight.toInt()}',
+        );
+      } catch (e) {
+        debugPrint('调整窗口大小失败: $e');
+        // 如果获取屏幕信息失败，使用默认限制
+        try {
+          final finalWidth = windowWidth.clamp(400.0, 1920.0);
+          final finalHeight = windowHeight.clamp(300.0, 1080.0);
+          await windowManager.setSize(Size(finalWidth, finalHeight));
+          await windowManager.center();
+          debugPrint(
+            '使用默认限制调整窗口大小: ${finalWidth.toInt()}x${finalHeight.toInt()}',
+          );
+        } catch (e2) {
+          debugPrint('窗口大小调整完全失败: $e2');
+        }
+      }
+    }
+  }
+
+  /// 分析图片分辨率
+  Future<void> _analyzeImageResolutions() async {
+    if (_images.isEmpty) return;
+
+    setState(() {
+      _isAnalyzingResolutions = true;
+    });
+
+    try {
+      // 在主线程中获取图片分辨率
+      final resolutions = await ImageResolutionService.getImageResolutions(
+        _images,
+      );
+
+      // 统计分辨率信息
+      final statistics = EpubParserService.calculateResolutionStatistics(
+        resolutions,
+      );
+
+      if (mounted) {
+        setState(() {
+          _resolutionStatistics = statistics;
+          _isAnalyzingResolutions = false;
+        });
+
+        // 自动调整窗口大小
+        await _adjustWindowSizeToMostCommonResolution();
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() {
+          _isAnalyzingResolutions = false;
+          _error = '分析图片分辨率失败: $e';
+        });
+      }
+    }
+  }
+
   Future<void> _loadEpubImages() async {
     try {
       final result = await compute(
@@ -94,6 +230,9 @@ class _EpubViewerPageState extends State<EpubViewerPage> {
               : 0;
           _isLoading = false;
         });
+
+        // 开始分析图片分辨率
+        await _analyzeImageResolutions();
       }
     } catch (e) {
       if (mounted) {
@@ -170,11 +309,18 @@ class _EpubViewerPageState extends State<EpubViewerPage> {
           ),
         ),
         const SizedBox(width: 16),
-        if (!_isLoading && _images.isNotEmpty)
+        if (!_isLoading && _images.isNotEmpty) ...[
           Text(
             '${_currentIndex + 1} / ${_images.length}',
             style: FluentTheme.of(context).typography.body,
           ),
+        ],
+        if (_isAnalyzingResolutions) ...[
+          const SizedBox(width: 8),
+          const SizedBox(width: 16, height: 16, child: ProgressRing()),
+          const SizedBox(width: 4),
+          Text('分析中...', style: FluentTheme.of(context).typography.caption),
+        ],
       ],
     );
   }

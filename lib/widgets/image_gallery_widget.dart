@@ -58,8 +58,8 @@ class ImageGalleryWidget extends StatelessWidget {
                 return PhotoViewGalleryPageOptions(
                   imageProvider: MemoryImage(images[index]),
                   initialScale: PhotoViewComputedScale.contained,
-                  minScale: PhotoViewComputedScale.contained * 0.5,
-                  maxScale: PhotoViewComputedScale.covered * 2.0,
+                  minScale: PhotoViewComputedScale.contained * 0.1,
+                  maxScale: PhotoViewComputedScale.covered * 4.0,
                   heroAttributes: PhotoViewHeroAttributes(tag: index),
                 );
               },
@@ -68,6 +68,7 @@ class ImageGalleryWidget extends StatelessWidget {
                   const Center(child: ProgressRing()),
               pageController: pageController,
               onPageChanged: onPageChanged,
+              backgroundDecoration: BoxDecoration(color: Colors.transparent),
             ),
           ),
         ),
