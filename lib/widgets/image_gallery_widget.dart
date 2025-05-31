@@ -103,11 +103,14 @@ class ImageGalleryWidget extends StatelessWidget {
               },
               onSecondaryTapDown: (details) {
                 // 显示 Fluent UI 右键菜单
+
+                final position = details.localPosition;
+
+                debugPrint('position: $position');
+
                 flyoutController.showFlyout(
-                  autoModeConfiguration: FlyoutAutoConfiguration(
-                    preferredMode: FlyoutPlacementMode.bottomCenter,
-                  ),
                   barrierDismissible: true,
+                  position: position,
                   dismissOnPointerMoveAway: false,
                   builder: (context) {
                     return MenuFlyout(items: _buildContextMenuItems());
