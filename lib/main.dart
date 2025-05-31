@@ -21,11 +21,10 @@ void main() async {
   if (isDesktop) {
     await flutter_acrylic.Window.initialize();
     await WindowManager.instance.ensureInitialized();
-
     final windowOptions = const WindowOptions(
       size: Size(800, 800),
       backgroundColor: Colors.transparent,
-      skipTaskbar: false,
+      skipTaskbar: true,
       titleBarStyle: TitleBarStyle.normal,
     );
 

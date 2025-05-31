@@ -60,8 +60,6 @@ class _MyHomePageState extends State<MyHomePage> with WindowListener {
         return buildPaneItem(e);
       }).toList();
 
-  // late final List<NavigationPaneItem> items = [...originalItems];
-
   @override
   void initState() {
     windowManager.addListener(this);
@@ -76,15 +74,9 @@ class _MyHomePageState extends State<MyHomePage> with WindowListener {
 
   @override
   Widget build(BuildContext context) {
-    return NavigationView(
-      key: viewKey,
-      pane: NavigationPane(
-        displayMode: PaneDisplayMode.compact,
-        items: originalItems,
-      ),
-      paneBodyBuilder: (item, body) {
-        return widget.child;
-      },
+    return Container(
+      color: FluentTheme.of(context).micaBackgroundColor,
+      child: widget.child,
     );
   }
 }
