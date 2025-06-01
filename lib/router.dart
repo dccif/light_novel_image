@@ -1,6 +1,6 @@
-import 'package:epub_image/home.dart';
-import 'package:epub_image/widgets/home_page.dart';
-import 'package:epub_image/widgets/epub_viewer_page.dart';
+import 'package:light_novel_image/home.dart';
+import 'package:light_novel_image/widgets/home_page.dart';
+import 'package:light_novel_image/widgets/epub_viewer_page.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:go_router/go_router.dart';
 

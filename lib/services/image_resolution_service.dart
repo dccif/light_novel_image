@@ -1,6 +1,6 @@
 import 'package:flutter/foundation.dart';
 import 'package:image_size_getter/image_size_getter.dart';
-import 'package:epub_image/models/image_resolution.dart';
+import 'package:light_novel_image/models/image_resolution.dart';
 
 class ImageResolutionService {
   /// 使用 image_size_getter 获取图片分辨率（只读取元数据，不解码图片）

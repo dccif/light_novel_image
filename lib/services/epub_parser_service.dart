@@ -4,9 +4,9 @@ import 'package:archive/archive.dart';
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as path;
 import 'package:xml/xml.dart';
-import 'package:epub_image/models/book_info.dart';
-import 'package:epub_image/models/epub_parse_result.dart';
-import 'package:epub_image/models/image_resolution.dart';
+import 'package:light_novel_image/models/book_info.dart';
+import 'package:light_novel_image/models/epub_parse_result.dart';
+import 'package:light_novel_image/models/image_resolution.dart';
 
 class EpubParserService {
   static const Set<String> _imageExtensions = {

@@ -3,12 +3,12 @@ import 'package:go_router/go_router.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:window_manager/window_manager.dart';
-import 'package:epub_image/models/book_info.dart';
-import 'package:epub_image/models/image_resolution.dart';
-import 'package:epub_image/services/epub_parser_service.dart';
-import 'package:epub_image/services/image_resolution_service.dart';
-import 'package:epub_image/services/system_viewer_service.dart';
-import 'package:epub_image/widgets/image_gallery_widget.dart';
+import 'package:light_novel_image/models/book_info.dart';
+import 'package:light_novel_image/models/image_resolution.dart';
+import 'package:light_novel_image/services/epub_parser_service.dart';
+import 'package:light_novel_image/services/image_resolution_service.dart';
+import 'package:light_novel_image/services/system_viewer_service.dart';
+import 'package:light_novel_image/widgets/image_gallery_widget.dart';
 
 class EpubViewerPage extends StatefulWidget {
   final List<String> epubPaths;

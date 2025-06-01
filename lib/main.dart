@@ -1,4 +1,4 @@
-import 'package:epub_image/router.dart';
+import 'package:light_novel_image/router.dart';
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter_acrylic/flutter_acrylic.dart' as flutter_acrylic;
 import 'package:flutter/foundation.dart';

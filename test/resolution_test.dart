@@ -1,6 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
-import 'package:epub_image/models/image_resolution.dart';
-import 'package:epub_image/services/epub_parser_service.dart';
+import 'package:light_novel_image/models/image_resolution.dart';
+import 'package:light_novel_image/services/epub_parser_service.dart';
 
 void main() {
   group('分辨率计算测试', () {
