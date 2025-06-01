@@ -42,6 +42,11 @@ class MyApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return FluentApp.router(title: appTitle, routerConfig: router);
+    return FluentApp.router(
+      title: appTitle,
+      theme: FluentThemeData(fontFamily: "Microsoft YaHei"),
+      supportedLocales: const [Locale('zh', 'CN')],
+      routerConfig: router,
+    );
   }
 }
