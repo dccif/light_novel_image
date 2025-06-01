@@ -1,14 +1,31 @@
 name: Release Build
 
 on:
-  release:
-    types: [published]
+  push:
+    tags:
+      - 'v*'
   workflow_dispatch:
     inputs:
       version:
         description: '发布版本号 (例如: 1.0.0)'
         required: true
         default: '1.0.0'
+      language:
+        description: 'README语言 (zh/en)'
+        required: false
+        default: 'zh'
+        type: choice
+        options:
+        - zh
+        - en
+      draft:
+        description: '是否创建草稿版本'
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: write
 
 jobs:
   build-windows:
@@ -53,14 +70,29 @@ jobs:
         mkdir release
         Copy-Item -Recurse "build\windows\x64\runner\Release\*" "release\"
         
-        # 创建README文件内容
-        $title = "# 轻小说图片浏览器 v${{ steps.version.outputs.VERSION }}"
-        $install = "安装说明:`n1. 解压所有文件到任意目录`n2. 双击 light_novel_image.exe 运行程序`n3. 将EPUB文件拖拽到程序窗口或点击选择文件"
-        $requirements = "系统要求:`n- Windows 10 或更高版本`n- Visual C++ Redistributable (通常系统已包含)"
-        $features = "功能特性:`n- 支持EPUB文件图片浏览`n- 拖拽操作`n- 图片缩放和查看`n- 多文件批量处理"
-        $link = "更多信息请访问: https://github.com/${{ github.repository }}"
+        # 根据语言选择模板文件
+        $language = "${{ github.event.inputs.language }}"
+        if ([string]::IsNullOrEmpty($language)) {
+          $language = "zh"
+        }
         
-        $readmeContent = "$title`n`n$install`n`n$requirements`n`n$features`n`n$link"
+        if ($language -eq "en") {
+          $templatePath = ".github\templates\README_WINDOWS_EN.txt"
+        } else {
+          $templatePath = ".github\templates\README_WINDOWS.txt"
+        }
+        
+        $version = "${{ steps.version.outputs.VERSION }}"
+        $repository = "${{ github.repository }}"
+        $buildTime = Get-Date -Format "yyyy-MM-dd HH:mm:ss UTC"
+        
+        # 读取模板文件并替换占位符
+        $readmeContent = Get-Content -Path $templatePath -Encoding UTF8 -Raw
+        $readmeContent = $readmeContent -replace '\{\{VERSION\}\}', $version
+        $readmeContent = $readmeContent -replace '\{\{REPOSITORY\}\}', $repository
+        $readmeContent = $readmeContent -replace '\{\{BUILD_TIME\}\}', $buildTime
+        
+        # 写入README文件
         $readmeContent | Out-File -FilePath "release\README.txt" -Encoding UTF8
         
         Compress-Archive -Path "release\*" -DestinationPath "$buildName.zip"
@@ -68,13 +100,6 @@ jobs:
       id: package
       shell: powershell
       
-    - name: 上传构建产物
-      uses: actions/upload-artifact@v4
-      with:
-        name: ${{ steps.version.outputs.BUILD_NAME }}
-        path: ${{ steps.package.outputs.ZIP_NAME }}
-        retention-days: 90
-        
     - name: 计算文件哈希
       id: hash
       run: |
@@ -82,28 +107,59 @@ jobs:
         echo "SHA256=$($hash.Hash)" >> $env:GITHUB_OUTPUT
       shell: powershell
       
+    - name: 生成Release描述
+      id: release_body
+      run: |
+        # 根据语言选择Release描述模板文件
+        $language = "${{ github.event.inputs.language }}"
+        if ([string]::IsNullOrEmpty($language)) {
+          $language = "zh"
+        }
+        
+        if ($language -eq "en") {
+          $releaseTemplatePath = ".github\templates\RELEASE_BODY_EN.txt"
+        } else {
+          $releaseTemplatePath = ".github\templates\RELEASE_BODY.txt"
+        }
+        
+        $buildName = "${{ steps.version.outputs.BUILD_NAME }}"
+        $zipName = "${{ steps.package.outputs.ZIP_NAME }}"
+        $sha256 = "${{ steps.hash.outputs.SHA256 }}"
+        $version = "${{ steps.version.outputs.VERSION }}"
+        $repository = "${{ github.repository }}"
+        $buildTime = Get-Date -Format "yyyy-MM-dd HH:mm:ss UTC"
+        
+        # 读取Release描述模板并替换占位符
+        $releaseContent = Get-Content -Path $releaseTemplatePath -Encoding UTF8 -Raw
+        $releaseContent = $releaseContent -replace '\{\{BUILD_NAME\}\}', $buildName
+        $releaseContent = $releaseContent -replace '\{\{ZIP_NAME\}\}', $zipName
+        $releaseContent = $releaseContent -replace '\{\{SHA256\}\}', $sha256
+        $releaseContent = $releaseContent -replace '\{\{VERSION\}\}', $version
+        $releaseContent = $releaseContent -replace '\{\{REPOSITORY\}\}', $repository
+        $releaseContent = $releaseContent -replace '\{\{BUILD_TIME\}\}', $buildTime
+        
+        # 将多行内容输出到GITHUB_OUTPUT
+        echo "content<<EOF" >> $env:GITHUB_OUTPUT
+        echo $releaseContent >> $env:GITHUB_OUTPUT
+        echo "EOF" >> $env:GITHUB_OUTPUT
+      shell: powershell
+      
     - name: 上传到Release
-      if: github.event_name == 'release' || github.event_name == 'workflow_dispatch'
-      uses: softprops/action-gh-release@v1
+      if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+      uses: softprops/action-gh-release@v2
       with:
         files: ${{ steps.package.outputs.ZIP_NAME }}
         tag_name: ${{ github.event_name == 'workflow_dispatch' && format('v{0}', github.event.inputs.version) || github.ref_name }}
-        name: ${{ github.event_name == 'workflow_dispatch' && format('Release v{0}', github.event.inputs.version) || github.event.release.name }}
-        body: |
-          ## 下载
-          - **Windows x64**: [${{ steps.version.outputs.BUILD_NAME }}.zip](${{ steps.package.outputs.ZIP_NAME }})
-          
-          ## 文件校验
-          - **SHA256**: `${{ steps.hash.outputs.SHA256 }}`
-          
-          ## 安装说明
-          1. 下载对应平台的zip文件
-          2. 解压到任意目录
-          3. 运行 `light_novel_image.exe`
-          
-          ## 更新内容
-          请查看提交历史了解详细更新内容。
-        draft: ${{ github.event_name == 'workflow_dispatch' }}
+        name: ${{ github.event_name == 'workflow_dispatch' && format('Release v{0}', github.event.inputs.version) || github.ref_name }}
+        body: ${{ steps.release_body.outputs.content }}
+        draft: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.draft == 'true' || false }}
         prerelease: false
       env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        
+    - name: 上传构建产物
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ steps.version.outputs.BUILD_NAME }}
+        path: ${{ steps.package.outputs.ZIP_NAME }}
+        retention-days: 90 

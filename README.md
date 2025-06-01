@@ -1,11 +1,10 @@
 # 轻小说图片浏览器 📚
 
 一个轻小说的EPUB图片浏览器，采用Flutter开发，支持Windows、macOS和Linux桌面平台。
-<!-- 
-[![Build Windows Release](https://github.com/your-username/light_novel_image/actions/workflows/build-windows.yml/badge.svg)](https://github.com/your-username/light_novel_image/actions/workflows/build-windows.yml)
-[![Release Build](https://github.com/your-username/light_novel_image/actions/workflows/release.yml/badge.svg)](https://github.com/your-username/light_novel_image/actions/workflows/release.yml) -->
+
 [![Flutter](https://img.shields.io/badge/flutter-3.32.1-blue)](https://flutter.dev/)
-[![Latest Release](https://img.shields.io/github/v/release/your-username/light_novel_image?include_prereleases)](https://github.com/your-username/light_novel_image/releases/latest)
+[![Latest Release](https://img.shields.io/github/v/release/dccif/light_novel_image?include_prereleases)](https://github.com/dccif/light_novel_image/releases/latest)
+
 ## ✨ 功能特性
 
 - 🖼️ **专业图片浏览** - 专为EPUB文件中的图片展示而优化

@@ -1,0 +1,33 @@
+## Download
+- **Windows x64**: [{{BUILD_NAME}}.zip]({{ZIP_NAME}})
+
+## File Verification
+- **SHA256**: `{{SHA256}}`
+
+## Installation Instructions
+1. Download the zip file for your platform
+2. Extract to any directory
+3. Run `light_novel_image.exe`
+
+## Features
+- Support for EPUB file image viewing
+- Drag and drop operation
+- Image zoom and viewing
+- Batch processing of multiple files
+
+## Usage
+1. After starting the program, click "Select EPUB File" button or drag EPUB files to the window
+2. The program will automatically parse images from the EPUB file
+3. Use mouse wheel or buttons for image zooming
+4. Use arrow keys or buttons to navigate between images
+
+## System Requirements
+- Windows 10 or higher
+- Visual C++ Redistributable (usually included with system)
+
+## Changelog
+Please check the commit history for detailed updates.
+
+---
+Release Time: {{BUILD_TIME}}
+Project URL: https://github.com/{{REPOSITORY}} 
