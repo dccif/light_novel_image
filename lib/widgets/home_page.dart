@@ -12,7 +12,6 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  final List<XFile> _list = [];
   bool _dragging = false;
   bool _hovering = false;
 
@@ -21,19 +20,15 @@ class _HomePageState extends State<HomePage> {
   }
 
   void _handleFileDrop(List<XFile> files) {
-    // 检查是否包含epub文件
+    // 只处理epub文件
     final epubFiles = files.where((file) => _isEpubFile(file.name)).toList();
 
     if (epubFiles.isNotEmpty) {
-      // 如果有epub文件，直接传递所有epub文件路径
+      // 传递所有epub文件路径到阅读器
       final epubPaths = epubFiles.map((file) => file.path).toList();
       context.go('/epub-viewer', extra: epubPaths);
-    } else {
-      // 如果没有epub文件，按原来的逻辑添加到列表
-      setState(() {
-        _list.addAll(files);
-      });
     }
+    // 如果没有epub文件，不做任何处理
   }
 
   Future<void> _pickFiles() async {
@@ -55,27 +50,9 @@ class _HomePageState extends State<HomePage> {
       padding: const EdgeInsets.all(12),
       child: Column(
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text('Epub image viewer', style: TextStyle(fontSize: 20)),
-              if (_list.isNotEmpty)
-                Button(
-                  onPressed: () {
-                    setState(() {
-                      _list.clear();
-                    });
-                  },
-                  child: const Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Icon(FluentIcons.clear),
-                      SizedBox(width: 8),
-                      Text('清空文件', style: TextStyle(fontSize: 16)),
-                    ],
-                  ),
-                ),
-            ],
+          const Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [Text('Epub 图片浏览器', style: TextStyle(fontSize: 20))],
           ),
           const SizedBox(height: 18),
           Expanded(
@@ -133,86 +110,65 @@ class _HomePageState extends State<HomePage> {
                       borderRadius: BorderRadius.circular(8),
                     ),
                     child: Center(
-                      child: _list.isEmpty
-                          ? Column(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  FluentIcons.cloud_upload,
-                                  size: 48,
-                                  color: _hovering
-                                      ? FluentTheme.of(context).accentColor
-                                      : null,
-                                ),
-                                const SizedBox(height: 16),
-                                Text(
-                                  '拖拽文件到此处或点击选择',
-                                  style: TextStyle(
-                                    fontSize: 18,
-                                    color: _hovering
-                                        ? FluentTheme.of(context).accentColor
-                                        : null,
-                                  ),
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  '支持 .epub 文件自动打开图片浏览器',
-                                  style: TextStyle(
-                                    fontSize: 14,
-                                    color: Colors.grey[100],
-                                  ),
-                                ),
-                              ],
-                            )
-                          : SingleChildScrollView(
-                              padding: const EdgeInsets.all(16),
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    '已添加的文件:',
-                                    style: FluentTheme.of(
-                                      context,
-                                    ).typography.bodyStrong,
-                                  ),
-                                  const SizedBox(height: 12),
-                                  ...(_list.map(
-                                    (item) => Padding(
-                                      padding: const EdgeInsets.only(bottom: 8),
-                                      child: Row(
-                                        children: [
-                                          Icon(
-                                            _isEpubFile(item.name)
-                                                ? FluentIcons.reading_mode_solid
-                                                : FluentIcons.document,
-                                            size: 16,
-                                          ),
-                                          const SizedBox(width: 8),
-                                          Expanded(
-                                            child: Text(
-                                              item.name,
-                                              style: FluentTheme.of(
-                                                context,
-                                              ).typography.body,
-                                            ),
-                                          ),
-                                          if (_isEpubFile(item.name))
-                                            Button(
-                                              onPressed: () {
-                                                context.go(
-                                                  '/epub-viewer',
-                                                  extra: [item.path],
-                                                );
-                                              },
-                                              child: const Text('打开'),
-                                            ),
-                                        ],
-                                      ),
-                                    ),
-                                  )),
-                                ],
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(
+                            FluentIcons.reading_mode_solid,
+                            size: 64,
+                            color: _hovering || _dragging
+                                ? FluentTheme.of(context).accentColor
+                                : Colors.grey[120],
+                          ),
+                          const SizedBox(height: 24),
+                          Text(
+                            '拖拽 EPUB 文件到此处',
+                            style: TextStyle(
+                              fontSize: 24,
+                              fontWeight: FontWeight.w600,
+                              color: _hovering || _dragging
+                                  ? FluentTheme.of(context).accentColor
+                                  : null,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            '或点击选择文件',
+                            style: TextStyle(
+                              fontSize: 16,
+                              color: _hovering || _dragging
+                                  ? FluentTheme.of(context).accentColor
+                                  : Colors.grey[100],
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 8,
+                            ),
+                            decoration: BoxDecoration(
+                              color: FluentTheme.of(
+                                context,
+                              ).accentColor.withValues(alpha: 0.1),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                color: FluentTheme.of(
+                                  context,
+                                ).accentColor.withValues(alpha: 0.3),
                               ),
                             ),
+                            child: Text(
+                              '仅支持 .epub 格式',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: FluentTheme.of(context).accentColor,
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
                   ),
                 ),
