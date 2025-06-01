@@ -3,6 +3,7 @@ import 'package:fluent_ui/fluent_ui.dart';
 import 'package:go_router/go_router.dart';
 import 'package:file_picker/file_picker.dart';
 import 'package:cross_file/cross_file.dart';
+import 'package:window_manager/window_manager.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -19,14 +20,19 @@ class _HomePageState extends State<HomePage> {
     return fileName.toLowerCase().endsWith('.epub');
   }
 
-  void _handleFileDrop(List<XFile> files) {
+  void _handleFileDrop(List<XFile> files) async {
     // 只处理epub文件
     final epubFiles = files.where((file) => _isEpubFile(file.name)).toList();
 
     if (epubFiles.isNotEmpty) {
+      // 恢复窗口焦点（修复拖拽后失去焦点的问题）
+      await windowManager.focus();
+
       // 传递所有epub文件路径到阅读器
       final epubPaths = epubFiles.map((file) => file.path).toList();
-      context.go('/epub-viewer', extra: epubPaths);
+      if (mounted) {
+        context.go('/epub-viewer', extra: epubPaths);
+      }
     }
     // 如果没有epub文件，不做任何处理
   }
