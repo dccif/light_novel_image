@@ -1,6 +1,7 @@
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:go_router/go_router.dart';
 import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:epub_image/models/book_info.dart';
 import 'package:epub_image/models/image_resolution.dart';
@@ -47,6 +48,29 @@ class _EpubViewerPageState extends State<EpubViewerPage> {
 
   Future<void> _initializeServices() async {
     await SystemViewerService.initTempDir();
+  }
+
+  /// 重置窗口大小到默认值
+  Future<void> _resetWindowSize() async {
+    if (!kIsWeb) {
+      try {
+        const defaultSize = Size(800, 800);
+        await windowManager.setSize(defaultSize);
+        debugPrint(
+          '窗口大小已重置为: ${defaultSize.width.toInt()}x${defaultSize.height.toInt()}',
+        );
+      } catch (e) {
+        debugPrint('重置窗口大小失败: $e');
+      }
+    }
+  }
+
+  /// 返回首页并重置窗口大小
+  Future<void> _goBackHome() async {
+    await _resetWindowSize();
+    if (mounted) {
+      context.go('/');
+    }
   }
 
   String get _currentBookTitle {
@@ -390,7 +414,7 @@ class _EpubViewerPageState extends State<EpubViewerPage> {
     return Row(
       children: [
         Button(
-          onPressed: () => context.go('/'),
+          onPressed: _goBackHome,
           child: const Row(
             mainAxisSize: MainAxisSize.min,
             children: [Icon(FluentIcons.back), SizedBox(width: 8), Text('返回')],
@@ -440,7 +464,7 @@ class _EpubViewerPageState extends State<EpubViewerPage> {
             const SizedBox(height: 16),
             Text(_error!),
             const SizedBox(height: 16),
-            Button(onPressed: () => context.go('/'), child: const Text('返回首页')),
+            Button(onPressed: _goBackHome, child: const Text('返回首页')),
           ],
         ),
       );
@@ -470,6 +494,7 @@ class _EpubViewerPageState extends State<EpubViewerPage> {
       onNextImage: _nextImage,
       onCopyToClipboard: _copyToClipboard,
       onOpenWithDialog: _openWithDialog,
+      onEscape: _goBackHome,
     );
   }
 

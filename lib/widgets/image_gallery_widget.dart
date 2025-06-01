@@ -14,6 +14,7 @@ class ImageGalleryWidget extends StatelessWidget {
   final VoidCallback onNextImage;
   final Function(String) onCopyToClipboard;
   final Function(String) onOpenWithDialog;
+  final VoidCallback? onEscape;
 
   const ImageGalleryWidget({
     super.key,
@@ -27,6 +28,7 @@ class ImageGalleryWidget extends StatelessWidget {
     required this.onNextImage,
     required this.onCopyToClipboard,
     required this.onOpenWithDialog,
+    this.onEscape,
   });
 
   List<MenuFlyoutItemBase> _buildContextMenuItems() {
@@ -80,7 +82,10 @@ class ImageGalleryWidget extends StatelessWidget {
           autofocus: true,
           onKeyEvent: (node, event) {
             if (event is KeyDownEvent) {
-              if (event.logicalKey == LogicalKeyboardKey.enter) {
+              if (event.logicalKey == LogicalKeyboardKey.escape) {
+                onEscape?.call();
+                return KeyEventResult.handled;
+              } else if (event.logicalKey == LogicalKeyboardKey.enter) {
                 onOpenInSystemViewer();
                 return KeyEventResult.handled;
               } else if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
