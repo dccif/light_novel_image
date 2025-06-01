@@ -4,7 +4,7 @@ import 'package:flutter_acrylic/flutter_acrylic.dart' as flutter_acrylic;
 import 'package:flutter/foundation.dart';
 import 'package:window_manager/window_manager.dart';
 
-const String appTitle = "Epub image viewer";
+const String appTitle = "轻小说图片浏览器";
 
 bool get isDesktop {
   if (kIsWeb) return false;

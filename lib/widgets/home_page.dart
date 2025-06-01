@@ -52,7 +52,7 @@ class _HomePageState extends State<HomePage> {
         children: [
           const Row(
             mainAxisAlignment: MainAxisAlignment.center,
-            children: [Text('Epub 图片浏览器', style: TextStyle(fontSize: 20))],
+            children: [Text('轻小说图片浏览器', style: TextStyle(fontSize: 20))],
           ),
           const SizedBox(height: 18),
           Expanded(
