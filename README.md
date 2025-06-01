@@ -4,6 +4,10 @@
 
 [![Flutter](https://img.shields.io/badge/flutter-3.32.1-blue)](https://flutter.dev/)
 [![Latest Release](https://img.shields.io/github/v/release/dccif/light_novel_image?include_prereleases)](https://github.com/dccif/light_novel_image/releases/latest)
+[![License](https://img.shields.io/github/license/dccif/light_novel_image)](https://github.com/dccif/light_novel_image/blob/main/LICENSE)
+[![Platform](https://img.shields.io/badge/platform-Windows-lightgrey)](https://github.com/dccif/light_novel_image)
+[![Dart](https://img.shields.io/badge/dart-%230175C2.svg?style=flat&logo=dart&logoColor=white)](https://dart.dev/)
+[![Code size](https://img.shields.io/github/languages/code-size/dccif/light_novel_image)](https://github.com/dccif/light_novel_image)
 
 ## ✨ 功能特性
 
