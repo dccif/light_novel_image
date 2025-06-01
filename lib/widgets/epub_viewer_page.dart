@@ -279,8 +279,8 @@ class _EpubViewerPageState extends State<EpubViewerPage> {
     });
 
     try {
-      // 在主线程中获取图片分辨率
-      final resolutions = await ImageResolutionService.getImageResolutions(
+      // 使用 image_size_getter 在后台线程中获取图片分辨率
+      final resolutions = await ImageResolutionService.getImageResolutionsAsync(
         _images,
       );
 
