@@ -1,0 +1,59 @@
+name: Manual Build
+
+on:
+  workflow_dispatch:
+    inputs:
+      build_type:
+        description: '构建类型'
+        required: true
+        default: 'release'
+        type: choice
+        options:
+        - release
+        - debug
+
+jobs:
+  build:
+    runs-on: windows-latest
+    
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v4
+      
+    - name: 设置Flutter环境
+      uses: subosito/flutter-action@v2
+      with:
+        flutter-version: '3.32.1'
+        channel: 'stable'
+        cache: true
+        
+    - name: 启用Windows桌面支持
+      run: flutter config --enable-windows-desktop
+      
+    - name: 获取依赖
+      run: flutter pub get
+      
+    - name: 构建应用
+      run: flutter build windows --${{ github.event.inputs.build_type }}
+      
+    - name: 创建发布包
+      run: |
+        $buildType = "${{ github.event.inputs.build_type }}"
+        $folderName = if ($buildType -eq "release") { "Release" } else { "Debug" }
+        $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
+        $zipName = "light_novel_image-$buildType-$timestamp.zip"
+        
+        mkdir build-output
+        Copy-Item -Recurse "build\windows\x64\runner\$folderName\*" "build-output\"
+        Compress-Archive -Path "build-output\*" -DestinationPath $zipName
+        
+        echo "ZIP_NAME=$zipName" >> $env:GITHUB_OUTPUT
+      id: package
+      shell: powershell
+      
+    - name: 上传构建产物
+      uses: actions/upload-artifact@v4
+      with:
+        name: light_novel_image-${{ github.event.inputs.build_type }}-${{ github.run_number }}
+        path: ${{ steps.package.outputs.ZIP_NAME }}
+        retention-days: 7 

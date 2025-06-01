@@ -1,7 +1,11 @@
 # 轻小说图片浏览器 📚
 
 一个轻小说的EPUB图片浏览器，采用Flutter开发，支持Windows、macOS和Linux桌面平台。
-
+<!-- 
+[![Build Windows Release](https://github.com/your-username/light_novel_image/actions/workflows/build-windows.yml/badge.svg)](https://github.com/your-username/light_novel_image/actions/workflows/build-windows.yml)
+[![Release Build](https://github.com/your-username/light_novel_image/actions/workflows/release.yml/badge.svg)](https://github.com/your-username/light_novel_image/actions/workflows/release.yml) -->
+[![Flutter](https://img.shields.io/badge/flutter-3.32.1-blue)](https://flutter.dev/)
+[![Latest Release](https://img.shields.io/github/v/release/your-username/light_novel_image?include_prereleases)](https://github.com/your-username/light_novel_image/releases/latest)
 ## ✨ 功能特性
 
 - 🖼️ **专业图片浏览** - 专为EPUB文件中的图片展示而优化
@@ -15,6 +19,18 @@
 ![应用演示](doc/demo.gif)
 
 ## 🚀 快速开始
+
+### 📥 下载预构建版本（推荐）
+
+如果您只想使用应用而不进行开发，可以直接下载预构建的版本：
+
+1. **前往 [Releases 页面](https://github.com/your-username/light_novel_image/releases/latest)**
+2. **下载最新的 `light_novel_image-v*-windows-x64.zip`**
+3. **解压并运行 `light_novel_image.exe`**
+
+> 💡 预构建版本会在每次代码更新后自动构建，无需安装Flutter开发环境。
+
+### 🛠️ 开发环境搭建
 
 ### 环境要求
 

@@ -1,0 +1,109 @@
+name: Release Build
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      version:
+        description: '发布版本号 (例如: 1.0.0)'
+        required: true
+        default: '1.0.0'
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v4
+      
+    - name: 设置Flutter环境
+      uses: subosito/flutter-action@v2
+      with:
+        flutter-version: '3.32.1'
+        channel: 'stable'
+        cache: true
+        
+    - name: 启用Windows桌面支持
+      run: flutter config --enable-windows-desktop
+      
+    - name: 获取依赖
+      run: flutter pub get
+      
+    - name: 构建Windows Release版本
+      run: flutter build windows --release
+      
+    - name: 获取版本信息
+      id: version
+      run: |
+        if ("${{ github.event.inputs.version }}" -ne "") {
+          $version = "${{ github.event.inputs.version }}"
+        } else {
+          $version = Select-String -Path "pubspec.yaml" -Pattern "version: (.+)" | ForEach-Object { $_.Matches.Groups[1].Value }
+          $version = $version.Split('+')[0]
+        }
+        echo "VERSION=$version" >> $env:GITHUB_OUTPUT
+        echo "BUILD_NAME=light_novel_image-v$version-windows-x64" >> $env:GITHUB_OUTPUT
+      shell: powershell
+      
+    - name: 打包Windows版本
+      run: |
+        $buildName = "${{ steps.version.outputs.BUILD_NAME }}"
+        mkdir release
+        Copy-Item -Recurse "build\windows\x64\runner\Release\*" "release\"
+        
+        # 创建README文件内容
+        $title = "# 轻小说图片浏览器 v${{ steps.version.outputs.VERSION }}"
+        $install = "安装说明:`n1. 解压所有文件到任意目录`n2. 双击 light_novel_image.exe 运行程序`n3. 将EPUB文件拖拽到程序窗口或点击选择文件"
+        $requirements = "系统要求:`n- Windows 10 或更高版本`n- Visual C++ Redistributable (通常系统已包含)"
+        $features = "功能特性:`n- 支持EPUB文件图片浏览`n- 拖拽操作`n- 图片缩放和查看`n- 多文件批量处理"
+        $link = "更多信息请访问: https://github.com/${{ github.repository }}"
+        
+        $readmeContent = "$title`n`n$install`n`n$requirements`n`n$features`n`n$link"
+        $readmeContent | Out-File -FilePath "release\README.txt" -Encoding UTF8
+        
+        Compress-Archive -Path "release\*" -DestinationPath "$buildName.zip"
+        echo "ZIP_NAME=$buildName.zip" >> $env:GITHUB_OUTPUT
+      id: package
+      shell: powershell
+      
+    - name: 上传构建产物
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ steps.version.outputs.BUILD_NAME }}
+        path: ${{ steps.package.outputs.ZIP_NAME }}
+        retention-days: 90
+        
+    - name: 计算文件哈希
+      id: hash
+      run: |
+        $hash = Get-FileHash "${{ steps.package.outputs.ZIP_NAME }}" -Algorithm SHA256
+        echo "SHA256=$($hash.Hash)" >> $env:GITHUB_OUTPUT
+      shell: powershell
+      
+    - name: 上传到Release
+      if: github.event_name == 'release' || github.event_name == 'workflow_dispatch'
+      uses: softprops/action-gh-release@v1
+      with:
+        files: ${{ steps.package.outputs.ZIP_NAME }}
+        tag_name: ${{ github.event_name == 'workflow_dispatch' && format('v{0}', github.event.inputs.version) || github.ref_name }}
+        name: ${{ github.event_name == 'workflow_dispatch' && format('Release v{0}', github.event.inputs.version) || github.event.release.name }}
+        body: |
+          ## 下载
+          - **Windows x64**: [${{ steps.version.outputs.BUILD_NAME }}.zip](${{ steps.package.outputs.ZIP_NAME }})
+          
+          ## 文件校验
+          - **SHA256**: `${{ steps.hash.outputs.SHA256 }}`
+          
+          ## 安装说明
+          1. 下载对应平台的zip文件
+          2. 解压到任意目录
+          3. 运行 `light_novel_image.exe`
+          
+          ## 更新内容
+          请查看提交历史了解详细更新内容。
+        draft: ${{ github.event_name == 'workflow_dispatch' }}
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 

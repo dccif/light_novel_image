@@ -1,0 +1,81 @@
+name: Build Windows Release
+
+on:
+  push:
+    branches: [ main, master ]
+    tags:
+      - 'v*'
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v4
+      
+    - name: 设置Flutter环境
+      uses: subosito/flutter-action@v2
+      with:
+        flutter-version: '3.32.1'
+        channel: 'stable'
+        cache: true
+        
+    - name: 启用Windows桌面支持
+      run: flutter config --enable-windows-desktop
+      
+    - name: 获取依赖
+      run: flutter pub get
+      
+    - name: 代码分析
+      run: flutter analyze
+      
+    - name: 运行测试
+      run: flutter test
+      
+    - name: 构建Windows Release版本
+      run: flutter build windows --release
+      
+    - name: 获取版本信息
+      id: version
+      run: |
+        $version = Select-String -Path "pubspec.yaml" -Pattern "version: (.+)" | ForEach-Object { $_.Matches.Groups[1].Value }
+        $version = $version.Split('+')[0]
+        echo "VERSION=$version" >> $env:GITHUB_OUTPUT
+        echo "BUILD_NAME=light_novel_image-v$version-windows-x64" >> $env:GITHUB_OUTPUT
+      shell: powershell
+      
+    - name: 创建发布目录
+      run: |
+        mkdir release
+        Copy-Item -Recurse "build\windows\x64\runner\Release\*" "release\"
+      shell: powershell
+      
+    - name: 创建zip包
+      run: |
+        $buildName = "${{ steps.version.outputs.BUILD_NAME }}"
+        Compress-Archive -Path "release\*" -DestinationPath "$buildName.zip"
+        echo "ZIP_NAME=$buildName.zip" >> $env:GITHUB_OUTPUT
+      id: zip
+      shell: powershell
+      
+    - name: 上传构建产物
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ steps.version.outputs.BUILD_NAME }}
+        path: ${{ steps.zip.outputs.ZIP_NAME }}
+        retention-days: 30
+        
+    - name: 创建Release（仅在标签推送时）
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v1
+      with:
+        files: ${{ steps.zip.outputs.ZIP_NAME }}
+        generate_release_notes: true
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
