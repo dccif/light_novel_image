@@ -96,22 +96,13 @@ class ImageGalleryWidget extends StatelessWidget {
           child: FlyoutTarget(
             controller: flyoutController,
             child: GestureDetector(
-              onDoubleTap: () {
-                // 确保双击功能正常工作
-                debugPrint('双击图片: ${imageNames[currentIndex]}');
-                onOpenInSystemViewer();
-              },
               onSecondaryTapDown: (details) {
                 // 显示 Fluent UI 右键菜单
-
-                final position = details.localPosition;
-
-                debugPrint('position: $position');
+                Offset position = details.localPosition;
+                position = Offset(position.dx + 20, position.dy + 70);
 
                 flyoutController.showFlyout(
-                  barrierDismissible: true,
                   position: position,
-                  dismissOnPointerMoveAway: false,
                   builder: (context) {
                     return MenuFlyout(items: _buildContextMenuItems());
                   },
