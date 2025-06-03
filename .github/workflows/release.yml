@@ -213,25 +213,38 @@ jobs:
         echo "ZIP_NAME=$buildName.zip" >> $GITHUB_OUTPUT
       id: package-mac
       
-    - name: 计算文件哈希
-      id: hash
+    - name: 计算文件哈希 (Windows)
+      if: matrix.platform == 'windows'
+      id: hash-win
       run: |
-        if [ "${{ matrix.platform }}" = "windows" ]; then
-          zipName="${{ steps.package-win.outputs.ZIP_NAME }}"
-          hash=$(Get-FileHash "$zipName" -Algorithm SHA256 | Select-Object -ExpandProperty Hash)
-          echo "SHA256=$hash" >> $env:GITHUB_OUTPUT
-        else
-          zipName="${{ steps.package-mac.outputs.ZIP_NAME }}"
-          hash=$(shasum -a 256 "$zipName" | cut -d' ' -f1)
-          echo "SHA256=$hash" >> $GITHUB_OUTPUT
-        fi
-      shell: ${{ matrix.platform == 'windows' && 'powershell' || 'bash' }}
+        zipName="${{ steps.package-win.outputs.ZIP_NAME }}"
+        hash=$(Get-FileHash "$zipName" -Algorithm SHA256 | Select-Object -ExpandProperty Hash)
+        echo "SHA256=$hash" >> $env:GITHUB_OUTPUT
+      shell: powershell
       
-    - name: 上传构建产物
+    - name: 计算文件哈希 (macOS)
+      if: matrix.platform == 'macos'
+      id: hash-mac
+      run: |
+        zipName="${{ steps.package-mac.outputs.ZIP_NAME }}"
+        hash=$(shasum -a 256 "$zipName" | cut -d' ' -f1)
+        echo "SHA256=$hash" >> $GITHUB_OUTPUT
+      shell: bash
+      
+    - name: 上传构建产物 (Windows)
+      if: matrix.platform == 'windows'
       uses: actions/upload-artifact@v4
       with:
         name: ${{ steps.version.outputs.BUILD_NAME }}
-        path: ${{ matrix.platform == 'windows' && steps.package-win.outputs.ZIP_NAME || steps.package-mac.outputs.ZIP_NAME }}
+        path: ${{ steps.package-win.outputs.ZIP_NAME }}
+        retention-days: 90
+        
+    - name: 上传构建产物 (macOS)
+      if: matrix.platform == 'macos'
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ steps.version.outputs.BUILD_NAME }}
+        path: ${{ steps.package-mac.outputs.ZIP_NAME }}
         retention-days: 90
       
   release:
