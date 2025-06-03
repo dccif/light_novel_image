@@ -1,19 +1,29 @@
 ## Download
-- **Windows x64**: [{{BUILD_NAME}}.zip]({{ZIP_NAME}})
+- **Windows x64**: [{{WINDOWS_ZIP}}]({{WINDOWS_ZIP}})
+- **macOS Universal**: [{{MACOS_ZIP}}]({{MACOS_ZIP}})
 
 ## File Verification
-- **SHA256**: `{{SHA256}}`
+- **Windows SHA256**: `{{WINDOWS_SHA256}}`
+- **macOS SHA256**: `{{MACOS_SHA256}}`
 
 ## Installation Instructions
-1. Download the zip file for your platform
+
+### Windows
+1. Download the Windows x64 zip file
 2. Extract to any directory
 3. Run `light_novel_image.exe`
+
+### macOS
+1. Download the macOS Universal zip file
+2. Extract and drag `light_novel_image.app` to Applications folder
+3. On first run, you may need to allow the app in System Preferences > Security & Privacy
 
 ## Features
 - Support for EPUB file image viewing
 - Drag and drop operation
 - Image zoom and viewing
 - Batch processing of multiple files
+- Cross-platform support (Windows, macOS)
 
 ## Usage
 1. After starting the program, click "Select EPUB File" button or drag EPUB files to the window
@@ -22,8 +32,8 @@
 4. Use arrow keys or buttons to navigate between images
 
 ## System Requirements
-- Windows 10 or higher
-- Visual C++ Redistributable (usually included with system)
+- **Windows**: Windows 10 or higher, Visual C++ Redistributable
+- **macOS**: macOS 10.14.6 or higher, 64-bit processor (Intel or Apple Silicon)
 
 ## Changelog
 Please check the commit history for detailed updates.

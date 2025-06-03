@@ -1,19 +1,29 @@
 ## 下载
-- **Windows x64**: [{{BUILD_NAME}}.zip]({{ZIP_NAME}})
+- **Windows x64**: [{{WINDOWS_ZIP}}]({{WINDOWS_ZIP}})
+- **macOS Universal**: [{{MACOS_ZIP}}]({{MACOS_ZIP}})
 
 ## 文件校验
-- **SHA256**: `{{SHA256}}`
+- **Windows SHA256**: `{{WINDOWS_SHA256}}`
+- **macOS SHA256**: `{{MACOS_SHA256}}`
 
 ## 安装说明
-1. 下载对应平台的zip文件
+
+### Windows
+1. 下载 Windows x64 zip文件
 2. 解压到任意目录
 3. 运行 `light_novel_image.exe`
+
+### macOS
+1. 下载 macOS Universal zip文件
+2. 解压并将 `light_novel_image.app` 拖拽到「应用程序」文件夹
+3. 首次运行时可能需要在「系统偏好设置」>「安全性与隐私」中允许应用运行
 
 ## 功能特性
 - 支持EPUB文件图片浏览
 - 拖拽操作支持
 - 图片缩放和查看
 - 多文件批量处理
+- 跨平台支持（Windows、macOS）
 
 ## 使用方法
 1. 启动程序后，点击"选择EPUB文件"按钮或直接拖拽EPUB文件到窗口
@@ -22,8 +32,8 @@
 4. 使用方向键或按钮切换图片
 
 ## 系统要求
-- Windows 10 或更高版本
-- Visual C++ Redistributable (通常系统已包含)
+- **Windows**: Windows 10 或更高版本，Visual C++ Redistributable
+- **macOS**: macOS 10.14.6 或更高版本，64位处理器（Intel 或 Apple Silicon）
 
 ## 更新内容
 请查看提交历史了解详细更新内容。

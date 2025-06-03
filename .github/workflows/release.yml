@@ -23,18 +23,100 @@ on:
         required: false
         default: true
         type: boolean
+      update_pubspec:
+        description: '是否同步更新pubspec.yaml版本号'
+        required: false
+        default: true
+        type: boolean
 
 permissions:
   contents: write
 
 jobs:
-  build-windows:
-    runs-on: windows-latest
+  build:
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            platform: windows
+            arch: x64
+            flutter-target: windows
+            build-command: flutter build windows --release
+            executable: light_novel_image.exe
+            template-suffix: WINDOWS
+          - os: macos-latest
+            platform: macos
+            arch: universal
+            flutter-target: macos
+            build-command: flutter build macos --release
+            executable: light_novel_image.app
+            template-suffix: MACOS
+    
+    runs-on: ${{ matrix.os }}
     
     steps:
     - name: 检出代码
       uses: actions/checkout@v4
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        fetch-depth: 0
       
+    - name: 获取版本信息
+      id: version
+      run: |
+        if [ "${{ github.event_name }}" = "push" ] && [[ "${{ github.ref }}" == refs/tags/* ]]; then
+          # 从Git Tag获取版本号
+          version="${{ github.ref_name }}"
+          version=${version#v}  # 移除前缀v
+        elif [ -n "${{ github.event.inputs.version }}" ]; then
+          # 手动输入的版本号
+          version="${{ github.event.inputs.version }}"
+        else
+          # 从pubspec.yaml获取版本号
+          version=$(grep "version:" pubspec.yaml | cut -d' ' -f2 | cut -d'+' -f1)
+        fi
+        echo "VERSION=$version" >> $GITHUB_OUTPUT
+        echo "BUILD_NAME=light_novel_image-v$version-${{ matrix.platform }}-${{ matrix.arch }}" >> $GITHUB_OUTPUT
+        echo "检测到版本号: $version"
+      shell: bash
+      
+    - name: 更新pubspec.yaml版本号
+      if: github.event_name == 'workflow_dispatch' && github.event.inputs.update_pubspec == 'true'
+      run: |
+        version="${{ steps.version.outputs.VERSION }}"
+        # 备份原文件
+        cp pubspec.yaml pubspec.yaml.bak
+        
+        # 更新版本号（保持build number +1）
+        if [ "${{ matrix.platform }}" = "windows" ]; then
+          sed -i "s/^version: .*/version: $version+1/" pubspec.yaml
+        else
+          sed -i '' "s/^version: .*/version: $version+1/" pubspec.yaml
+        fi
+        
+        echo "已更新pubspec.yaml版本号为: $version+1"
+        
+        # 显示变更
+        echo "版本号变更:"
+        diff pubspec.yaml.bak pubspec.yaml || true
+      shell: bash
+      
+    - name: 提交pubspec.yaml变更
+      if: github.event_name == 'workflow_dispatch' && github.event.inputs.update_pubspec == 'true' && matrix.platform == 'windows'
+      run: |
+        git config --global user.name 'github-actions[bot]'
+        git config --global user.email 'github-actions[bot]@users.noreply.github.com'
+        
+        if git diff --quiet pubspec.yaml; then
+          echo "版本号无变更，跳过提交"
+        else
+          git add pubspec.yaml
+          git commit -m "chore: update version to ${{ steps.version.outputs.VERSION }}"
+          git push
+          echo "已提交pubspec.yaml版本号更新"
+        fi
+      shell: bash
+        
     - name: 设置Flutter环境
       uses: subosito/flutter-action@v2
       with:
@@ -42,29 +124,23 @@ jobs:
         channel: 'stable'
         cache: true
         
-    - name: 启用Windows桌面支持
-      run: flutter config --enable-windows-desktop
+    - name: 启用桌面支持
+      run: |
+        if [ "${{ matrix.platform }}" = "windows" ]; then
+          flutter config --enable-windows-desktop
+        else
+          flutter config --enable-macos-desktop
+        fi
+      shell: bash
       
     - name: 获取依赖
       run: flutter pub get
       
-    - name: 构建Windows Release版本
-      run: flutter build windows --release
-      
-    - name: 获取版本信息
-      id: version
-      run: |
-        if ("${{ github.event.inputs.version }}" -ne "") {
-          $version = "${{ github.event.inputs.version }}"
-        } else {
-          $version = Select-String -Path "pubspec.yaml" -Pattern "version: (.+)" | ForEach-Object { $_.Matches.Groups[1].Value }
-          $version = $version.Split('+')[0]
-        }
-        echo "VERSION=$version" >> $env:GITHUB_OUTPUT
-        echo "BUILD_NAME=light_novel_image-v$version-windows-x64" >> $env:GITHUB_OUTPUT
-      shell: powershell
+    - name: 构建Release版本
+      run: ${{ matrix.build-command }}
       
     - name: 打包Windows版本
+      if: matrix.platform == 'windows'
       run: |
         $buildName = "${{ steps.version.outputs.BUILD_NAME }}"
         mkdir release
@@ -77,9 +153,9 @@ jobs:
         }
         
         if ($language -eq "en") {
-          $templatePath = ".github\templates\README_WINDOWS_EN.txt"
+          $templatePath = ".github\templates\README_${{ matrix.template-suffix }}_EN.txt"
         } else {
-          $templatePath = ".github\templates\README_WINDOWS.txt"
+          $templatePath = ".github\templates\README_${{ matrix.template-suffix }}.txt"
         }
         
         $version = "${{ steps.version.outputs.VERSION }}"
@@ -97,69 +173,147 @@ jobs:
         
         Compress-Archive -Path "release\*" -DestinationPath "$buildName.zip"
         echo "ZIP_NAME=$buildName.zip" >> $env:GITHUB_OUTPUT
-      id: package
+      id: package-win
       shell: powershell
+      
+    - name: 打包macOS版本
+      if: matrix.platform == 'macos'
+      run: |
+        buildName="${{ steps.version.outputs.BUILD_NAME }}"
+        mkdir release
+        cp -r build/macos/Build/Products/Release/${{ matrix.executable }} release/
+        
+        # 根据语言选择模板文件
+        language="${{ github.event.inputs.language }}"
+        if [ -z "$language" ]; then
+          language="zh"
+        fi
+        
+        if [ "$language" = "en" ]; then
+          templatePath=".github/templates/README_${{ matrix.template-suffix }}_EN.txt"
+        else
+          templatePath=".github/templates/README_${{ matrix.template-suffix }}.txt"
+        fi
+        
+        version="${{ steps.version.outputs.VERSION }}"
+        repository="${{ github.repository }}"
+        buildTime=$(date -u "+%Y-%m-%d %H:%M:%S UTC")
+        
+        # 读取模板文件并替换占位符
+        readmeContent=$(cat "$templatePath")
+        readmeContent=${readmeContent//\{\{VERSION\}\}/$version}
+        readmeContent=${readmeContent//\{\{REPOSITORY\}\}/$repository}
+        readmeContent=${readmeContent//\{\{BUILD_TIME\}\}/$buildTime}
+        
+        # 写入README文件
+        echo "$readmeContent" > release/README.txt
+        
+        # 创建zip文件
+        cd release && zip -r "../$buildName.zip" . && cd ..
+        echo "ZIP_NAME=$buildName.zip" >> $GITHUB_OUTPUT
+      id: package-mac
       
     - name: 计算文件哈希
       id: hash
       run: |
-        $hash = Get-FileHash "${{ steps.package.outputs.ZIP_NAME }}" -Algorithm SHA256
-        echo "SHA256=$($hash.Hash)" >> $env:GITHUB_OUTPUT
-      shell: powershell
+        if [ "${{ matrix.platform }}" = "windows" ]; then
+          zipName="${{ steps.package-win.outputs.ZIP_NAME }}"
+          hash=$(Get-FileHash "$zipName" -Algorithm SHA256 | Select-Object -ExpandProperty Hash)
+          echo "SHA256=$hash" >> $env:GITHUB_OUTPUT
+        else
+          zipName="${{ steps.package-mac.outputs.ZIP_NAME }}"
+          hash=$(shasum -a 256 "$zipName" | cut -d' ' -f1)
+          echo "SHA256=$hash" >> $GITHUB_OUTPUT
+        fi
+      shell: ${{ matrix.platform == 'windows' && 'powershell' || 'bash' }}
       
+    - name: 上传构建产物
+      uses: actions/upload-artifact@v4
+      with:
+        name: ${{ steps.version.outputs.BUILD_NAME }}
+        path: ${{ matrix.platform == 'windows' && steps.package-win.outputs.ZIP_NAME || steps.package-mac.outputs.ZIP_NAME }}
+        retention-days: 90
+      
+  release:
+    needs: build
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v4
+      
+    - name: 下载所有构建产物
+      uses: actions/download-artifact@v4
+      with:
+        path: artifacts
+        
+    - name: 获取版本信息
+      id: version
+      run: |
+        if [ "${{ github.event_name }}" = "push" ] && [[ "${{ github.ref }}" == refs/tags/* ]]; then
+          # 从Git Tag获取版本号
+          version="${{ github.ref_name }}"
+          version=${version#v}  # 移除前缀v
+        elif [ -n "${{ github.event.inputs.version }}" ]; then
+          # 手动输入的版本号
+          version="${{ github.event.inputs.version }}"
+        else
+          # 从pubspec.yaml获取版本号
+          version=$(grep "version:" pubspec.yaml | cut -d' ' -f2 | cut -d'+' -f1)
+        fi
+        echo "VERSION=$version" >> $GITHUB_OUTPUT
+        echo "Release版本号: $version"
+        
     - name: 生成Release描述
       id: release_body
       run: |
         # 根据语言选择Release描述模板文件
-        $language = "${{ github.event.inputs.language }}"
-        if ([string]::IsNullOrEmpty($language)) {
-          $language = "zh"
-        }
+        language="${{ github.event.inputs.language }}"
+        if [ -z "$language" ]; then
+          language="zh"
+        fi
         
-        if ($language -eq "en") {
-          $releaseTemplatePath = ".github\templates\RELEASE_BODY_EN.txt"
-        } else {
-          $releaseTemplatePath = ".github\templates\RELEASE_BODY.txt"
-        }
+        if [ "$language" = "en" ]; then
+          releaseTemplatePath=".github/templates/RELEASE_BODY_EN.txt"
+        else
+          releaseTemplatePath=".github/templates/RELEASE_BODY.txt"
+        fi
         
-        $buildName = "${{ steps.version.outputs.BUILD_NAME }}"
-        $zipName = "${{ steps.package.outputs.ZIP_NAME }}"
-        $sha256 = "${{ steps.hash.outputs.SHA256 }}"
-        $version = "${{ steps.version.outputs.VERSION }}"
-        $repository = "${{ github.repository }}"
-        $buildTime = Get-Date -Format "yyyy-MM-dd HH:mm:ss UTC"
+        version="${{ steps.version.outputs.VERSION }}"
+        repository="${{ github.repository }}"
+        buildTime=$(date -u "+%Y-%m-%d %H:%M:%S UTC")
+        
+        # 获取构建产物信息
+        windowsZip=$(find artifacts -name "*windows*" -type f | head -1 | xargs basename)
+        macosZip=$(find artifacts -name "*macos*" -type f | head -1 | xargs basename)
+        
+        windowsHash=$(find artifacts -name "*windows*" -type f | head -1 | xargs shasum -a 256 | cut -d' ' -f1)
+        macosHash=$(find artifacts -name "*macos*" -type f | head -1 | xargs shasum -a 256 | cut -d' ' -f1)
         
         # 读取Release描述模板并替换占位符
-        $releaseContent = Get-Content -Path $releaseTemplatePath -Encoding UTF8 -Raw
-        $releaseContent = $releaseContent -replace '\{\{BUILD_NAME\}\}', $buildName
-        $releaseContent = $releaseContent -replace '\{\{ZIP_NAME\}\}', $zipName
-        $releaseContent = $releaseContent -replace '\{\{SHA256\}\}', $sha256
-        $releaseContent = $releaseContent -replace '\{\{VERSION\}\}', $version
-        $releaseContent = $releaseContent -replace '\{\{REPOSITORY\}\}', $repository
-        $releaseContent = $releaseContent -replace '\{\{BUILD_TIME\}\}', $buildTime
+        releaseContent=$(cat "$releaseTemplatePath")
+        releaseContent=${releaseContent//\{\{VERSION\}\}/$version}
+        releaseContent=${releaseContent//\{\{REPOSITORY\}\}/$repository}
+        releaseContent=${releaseContent//\{\{BUILD_TIME\}\}/$buildTime}
+        releaseContent=${releaseContent//\{\{WINDOWS_ZIP\}\}/$windowsZip}
+        releaseContent=${releaseContent//\{\{MACOS_ZIP\}\}/$macosZip}
+        releaseContent=${releaseContent//\{\{WINDOWS_SHA256\}\}/$windowsHash}
+        releaseContent=${releaseContent//\{\{MACOS_SHA256\}\}/$macosHash}
         
         # 将多行内容输出到GITHUB_OUTPUT
-        echo "content<<EOF" >> $env:GITHUB_OUTPUT
-        echo $releaseContent >> $env:GITHUB_OUTPUT
-        echo "EOF" >> $env:GITHUB_OUTPUT
-      shell: powershell
-      
-    - name: 上传到Release
-      if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+        echo "content<<EOF" >> $GITHUB_OUTPUT
+        echo "$releaseContent" >> $GITHUB_OUTPUT
+        echo "EOF" >> $GITHUB_OUTPUT
+        
+    - name: 创建Release
       uses: softprops/action-gh-release@v2
       with:
-        files: ${{ steps.package.outputs.ZIP_NAME }}
+        files: artifacts/*/*
         tag_name: ${{ github.event_name == 'workflow_dispatch' && format('v{0}', github.event.inputs.version) || github.ref_name }}
         name: ${{ github.event_name == 'workflow_dispatch' && format('Release v{0}', github.event.inputs.version) || github.ref_name }}
         body: ${{ steps.release_body.outputs.content }}
         draft: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.draft == 'true' || false }}
         prerelease: false
       env:
-        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        
-    - name: 上传构建产物
-      uses: actions/upload-artifact@v4
-      with:
-        name: ${{ steps.version.outputs.BUILD_NAME }}
-        path: ${{ steps.package.outputs.ZIP_NAME }}
-        retention-days: 90 
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
