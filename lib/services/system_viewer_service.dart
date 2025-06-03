@@ -90,7 +90,7 @@ class SystemViewerService {
           throw Exception('PowerShell 复制失败: ${result.stderr}');
         }
       } else if (Platform.isMacOS) {
-        // macOS: 使用 pbcopy
+        // macOS: 使用 osascript 复制图片到剪贴板
         final result = await Process.run('osascript', [
           '-e',
           'set the clipboard to (read (POSIX file "$tempFilePath") as JPEG picture)',
@@ -198,10 +198,15 @@ class SystemViewerService {
           tempFilePath,
         ]);
       } else if (Platform.isMacOS) {
-        // macOS: 显示选择应用程序对话框
-        await Process.run('open', ['-a', 'Finder', tempFilePath]);
-        // 或者使用 open 命令的选择器
-        // await Process.run('open', ['-R', tempFilePath]);
+        // macOS: 使用AppleScript显示应用程序选择器对话框
+        final script =
+            '''
+          tell application "Finder"
+            activate
+            open POSIX file "$tempFilePath" with prompt
+          end tell
+        ''';
+        await Process.run('osascript', ['-e', script]);
       } else if (Platform.isLinux) {
         // Linux: 尝试不同的方法
         try {
