@@ -48,14 +48,22 @@ jobs:
             platform: macos
             arch: arm64
             flutter-target: macos
-            build-command: flutter build macos --release --arch arm64
+            build-command: |
+              cd macos
+              xcodebuild -workspace Runner.xcworkspace -scheme Runner -configuration Release -archivePath build/Runner.xcarchive archive EXCLUDED_ARCHS=x86_64 ARCHS=arm64 ONLY_ACTIVE_ARCH=NO
+              xcodebuild -exportArchive -archivePath build/Runner.xcarchive -exportPath build/Release -exportOptionsPlist exportOptions.plist
+              cd ..
             executable: light_novel_image.app
             template-suffix: MACOS_ARM64
           - os: macos-latest
             platform: macos
             arch: x64
             flutter-target: macos
-            build-command: flutter build macos --release --arch x64
+            build-command: |
+              cd macos
+              xcodebuild -workspace Runner.xcworkspace -scheme Runner -configuration Release -archivePath build/Runner.xcarchive archive EXCLUDED_ARCHS=arm64 ARCHS=x86_64 ONLY_ACTIVE_ARCH=NO
+              xcodebuild -exportArchive -archivePath build/Runner.xcarchive -exportPath build/Release -exportOptionsPlist exportOptions.plist
+              cd ..
             executable: light_novel_image.app
             template-suffix: MACOS_X64
     
@@ -143,6 +151,27 @@ jobs:
     - name: 获取依赖
       run: flutter pub get
       
+    - name: 准备 macOS 构建环境
+      if: matrix.platform == 'macos'
+      run: |
+        # 创建 exportOptions.plist
+        cat > macos/exportOptions.plist << EOF
+        <?xml version="1.0" encoding="UTF-8"?>
+        <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+        <plist version="1.0">
+        <dict>
+          <key>method</key>
+          <string>mac-application</string>
+          <key>signingStyle</key>
+          <string>automatic</string>
+        </dict>
+        </plist>
+        EOF
+        
+        # 首先运行 flutter build 生成必要的文件
+        flutter build macos --release
+      shell: bash
+      
     - name: 构建Release版本
       run: ${{ matrix.build-command }}
       
@@ -188,7 +217,7 @@ jobs:
       run: |
         buildName="${{ steps.version.outputs.BUILD_NAME }}"
         mkdir release
-        cp -r build/macos/Build/Products/Release/${{ matrix.executable }} release/
+        cp -r macos/build/Release/${{ matrix.executable }} release/
         
         # 根据语言选择模板文件
         language="${{ github.event.inputs.language }}"
