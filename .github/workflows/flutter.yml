@@ -1,0 +1,41 @@
+name: Flutter Analysis and Tests
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_analyze:
+        description: '是否运行代码分析'
+        required: false
+        default: true
+        type: boolean
+      run_tests:
+        description: '是否运行测试'
+        required: false
+        default: true
+        type: boolean
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: 检出代码
+      uses: actions/checkout@v4
+      
+    - name: 设置Flutter环境
+      uses: subosito/flutter-action@v2
+      with:
+        flutter-version: '3.32.1'
+        channel: 'stable'
+        cache: true
+        
+    - name: 获取依赖
+      run: flutter pub get
+      
+    - name: 代码分析
+      if: github.event.inputs.run_analyze == 'true'
+      run: flutter analyze
+      
+    - name: 运行测试
+      if: github.event.inputs.run_tests == 'true'
+      run: flutter test 

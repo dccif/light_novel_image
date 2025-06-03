@@ -1,9 +1,6 @@
 name: Release Build
 
 on:
-  push:
-    tags:
-      - 'v*'
   workflow_dispatch:
     inputs:
       version:
@@ -79,11 +76,7 @@ jobs:
     - name: 获取版本信息
       id: version
       run: |
-        if [ "${{ github.event_name }}" = "push" ] && [[ "${{ github.ref }}" == refs/tags/* ]]; then
-          # 从Git Tag获取版本号
-          version="${{ github.ref_name }}"
-          version=${version#v}  # 移除前缀v
-        elif [ -n "${{ github.event.inputs.version }}" ]; then
+        if [ -n "${{ github.event.inputs.version }}" ]; then
           # 手动输入的版本号
           version="${{ github.event.inputs.version }}"
         else
@@ -286,7 +279,7 @@ jobs:
   release:
     needs: build
     runs-on: ubuntu-latest
-    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
+    if: github.event_name == 'workflow_dispatch'
     
     steps:
     - name: 检出代码
@@ -300,11 +293,7 @@ jobs:
     - name: 获取版本信息
       id: version
       run: |
-        if [ "${{ github.event_name }}" = "push" ] && [[ "${{ github.ref }}" == refs/tags/* ]]; then
-          # 从Git Tag获取版本号
-          version="${{ github.ref_name }}"
-          version=${version#v}  # 移除前缀v
-        elif [ -n "${{ github.event.inputs.version }}" ]; then
+        if [ -n "${{ github.event.inputs.version }}" ]; then
           # 手动输入的版本号
           version="${{ github.event.inputs.version }}"
         else
@@ -363,10 +352,10 @@ jobs:
       uses: softprops/action-gh-release@v2
       with:
         files: artifacts/*/*
-        tag_name: ${{ github.event_name == 'workflow_dispatch' && format('v{0}', github.event.inputs.version) || github.ref_name }}
-        name: ${{ github.event_name == 'workflow_dispatch' && format('Release v{0}', github.event.inputs.version) || github.ref_name }}
+        tag_name: v${{ github.event.inputs.version }}
+        name: Release v${{ github.event.inputs.version }}
         body: ${{ steps.release_body.outputs.content }}
-        draft: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.draft == 'true' || false }}
+        draft: ${{ github.event.inputs.draft == 'true' }}
         prerelease: false
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }} 
