@@ -1,10 +1,20 @@
 ## 下载
+
+### Windows
 - **Windows x64**: [{{WINDOWS_ZIP}}]({{WINDOWS_ZIP}})
-- **macOS Universal**: [{{MACOS_ZIP}}]({{MACOS_ZIP}})
+
+### macOS
+- **Apple Silicon (M1/M2/M3)**: [{{MACOS_ARM64_ZIP}}]({{MACOS_ARM64_ZIP}})
+- **Intel**: [{{MACOS_X64_ZIP}}]({{MACOS_X64_ZIP}})
 
 ## 文件校验
-- **Windows SHA256**: `{{WINDOWS_SHA256}}`
-- **macOS SHA256**: `{{MACOS_SHA256}}`
+
+### Windows
+- **Windows x64 SHA256**: `{{WINDOWS_SHA256}}`
+
+### macOS
+- **Apple Silicon SHA256**: `{{MACOS_ARM64_SHA256}}`
+- **Intel SHA256**: `{{MACOS_X64_SHA256}}`
 
 ## 安装说明
 
@@ -14,7 +24,9 @@
 3. 运行 `light_novel_image.exe`
 
 ### macOS
-1. 下载 macOS Universal zip文件
+1. 下载对应处理器架构的版本：
+   - Apple Silicon Mac (M1/M2/M3) 选择 ARM64 版本
+   - Intel Mac 选择 Intel 版本
 2. 解压并将 `light_novel_image.app` 拖拽到「应用程序」文件夹
 3. 首次运行时可能需要在「系统偏好设置」>「安全性与隐私」中允许应用运行
 
@@ -24,6 +36,7 @@
 - 图片缩放和查看
 - 多文件批量处理
 - 跨平台支持（Windows、macOS）
+- 针对不同处理器架构优化
 
 ## 使用方法
 1. 启动程序后，点击"选择EPUB文件"按钮或直接拖拽EPUB文件到窗口
@@ -33,7 +46,8 @@
 
 ## 系统要求
 - **Windows**: Windows 10 或更高版本，Visual C++ Redistributable
-- **macOS**: macOS 10.14.6 或更高版本，64位处理器（Intel 或 Apple Silicon）
+- **macOS ARM64**: macOS 11.0 或更高版本，Apple Silicon处理器
+- **macOS Intel**: macOS 10.14.6 或更高版本，Intel 64位处理器
 
 ## 更新内容
 请查看提交历史了解详细更新内容。

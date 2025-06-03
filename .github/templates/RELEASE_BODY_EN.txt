@@ -1,10 +1,20 @@
-## Download
+## Downloads
+
+### Windows
 - **Windows x64**: [{{WINDOWS_ZIP}}]({{WINDOWS_ZIP}})
-- **macOS Universal**: [{{MACOS_ZIP}}]({{MACOS_ZIP}})
+
+### macOS
+- **Apple Silicon (M1/M2/M3)**: [{{MACOS_ARM64_ZIP}}]({{MACOS_ARM64_ZIP}})
+- **Intel**: [{{MACOS_X64_ZIP}}]({{MACOS_X64_ZIP}})
 
 ## File Verification
-- **Windows SHA256**: `{{WINDOWS_SHA256}}`
-- **macOS SHA256**: `{{MACOS_SHA256}}`
+
+### Windows
+- **Windows x64 SHA256**: `{{WINDOWS_SHA256}}`
+
+### macOS
+- **Apple Silicon SHA256**: `{{MACOS_ARM64_SHA256}}`
+- **Intel SHA256**: `{{MACOS_X64_SHA256}}`
 
 ## Installation Instructions
 
@@ -14,30 +24,34 @@
 3. Run `light_novel_image.exe`
 
 ### macOS
-1. Download the macOS Universal zip file
-2. Extract and drag `light_novel_image.app` to Applications folder
-3. On first run, you may need to allow the app in System Preferences > Security & Privacy
+1. Download the version for your processor architecture:
+   - Apple Silicon Mac (M1/M2/M3): Choose ARM64 version
+   - Intel Mac: Choose Intel version
+2. Extract and drag `light_novel_image.app` to the Applications folder
+3. On first launch, you may need to allow the app to run in System Preferences > Security & Privacy
 
 ## Features
-- Support for EPUB file image viewing
-- Drag and drop operation
-- Image zoom and viewing
-- Batch processing of multiple files
+- EPUB image browsing support
+- Drag and drop operations
+- Image zoom and view
+- Batch file processing
 - Cross-platform support (Windows, macOS)
+- Optimized for different processor architectures
 
 ## Usage
-1. After starting the program, click "Select EPUB File" button or drag EPUB files to the window
+1. After launching, click "Select EPUB File" or drag EPUB files directly to the window
 2. The program will automatically parse images from the EPUB file
-3. Use mouse wheel or buttons for image zooming
-4. Use arrow keys or buttons to navigate between images
+3. Use mouse wheel or buttons to zoom images
+4. Use arrow keys or buttons to switch between images
 
 ## System Requirements
-- **Windows**: Windows 10 or higher, Visual C++ Redistributable
-- **macOS**: macOS 10.14.6 or higher, 64-bit processor (Intel or Apple Silicon)
+- **Windows**: Windows 10 or later, Visual C++ Redistributable
+- **macOS ARM64**: macOS 11.0 or later, Apple Silicon processor
+- **macOS Intel**: macOS 10.14.6 or later, Intel 64-bit processor
 
-## Changelog
-Please check the commit history for detailed updates.
+## Updates
+Please check the commit history for detailed update information.
 
 ---
 Release Time: {{BUILD_TIME}}
-Project URL: https://github.com/{{REPOSITORY}} 
+Repository: https://github.com/{{REPOSITORY}} 

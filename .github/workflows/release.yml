@@ -46,11 +46,18 @@ jobs:
             template-suffix: WINDOWS
           - os: macos-latest
             platform: macos
-            arch: universal
+            arch: arm64
             flutter-target: macos
-            build-command: flutter build macos --release
+            build-command: flutter build macos --release --arch arm64
             executable: light_novel_image.app
-            template-suffix: MACOS
+            template-suffix: MACOS_ARM64
+          - os: macos-latest
+            platform: macos
+            arch: x64
+            flutter-target: macos
+            build-command: flutter build macos --release --arch x64
+            executable: light_novel_image.app
+            template-suffix: MACOS_X64
     
     runs-on: ${{ matrix.os }}
     
@@ -299,10 +306,12 @@ jobs:
         
         # 获取构建产物信息
         windowsZip=$(find artifacts -name "*windows*" -type f | head -1 | xargs basename)
-        macosZip=$(find artifacts -name "*macos*" -type f | head -1 | xargs basename)
+        macosArmZip=$(find artifacts -name "*macos*arm64*" -type f | head -1 | xargs basename)
+        macosX64Zip=$(find artifacts -name "*macos*x64*" -type f | head -1 | xargs basename)
         
         windowsHash=$(find artifacts -name "*windows*" -type f | head -1 | xargs shasum -a 256 | cut -d' ' -f1)
-        macosHash=$(find artifacts -name "*macos*" -type f | head -1 | xargs shasum -a 256 | cut -d' ' -f1)
+        macosArmHash=$(find artifacts -name "*macos*arm64*" -type f | head -1 | xargs shasum -a 256 | cut -d' ' -f1)
+        macosX64Hash=$(find artifacts -name "*macos*x64*" -type f | head -1 | xargs shasum -a 256 | cut -d' ' -f1)
         
         # 读取Release描述模板并替换占位符
         releaseContent=$(cat "$releaseTemplatePath")
@@ -310,9 +319,11 @@ jobs:
         releaseContent=${releaseContent//\{\{REPOSITORY\}\}/$repository}
         releaseContent=${releaseContent//\{\{BUILD_TIME\}\}/$buildTime}
         releaseContent=${releaseContent//\{\{WINDOWS_ZIP\}\}/$windowsZip}
-        releaseContent=${releaseContent//\{\{MACOS_ZIP\}\}/$macosZip}
+        releaseContent=${releaseContent//\{\{MACOS_ARM64_ZIP\}\}/$macosArmZip}
+        releaseContent=${releaseContent//\{\{MACOS_X64_ZIP\}\}/$macosX64Zip}
         releaseContent=${releaseContent//\{\{WINDOWS_SHA256\}\}/$windowsHash}
-        releaseContent=${releaseContent//\{\{MACOS_SHA256\}\}/$macosHash}
+        releaseContent=${releaseContent//\{\{MACOS_ARM64_SHA256\}\}/$macosArmHash}
+        releaseContent=${releaseContent//\{\{MACOS_X64_SHA256\}\}/$macosX64Hash}
         
         # 将多行内容输出到GITHUB_OUTPUT
         echo "content<<EOF" >> $GITHUB_OUTPUT
