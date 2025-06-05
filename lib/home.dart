@@ -1,6 +1,7 @@
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:go_router/go_router.dart';
 import 'package:window_manager/window_manager.dart';
+import 'package:light_novel_image/router.dart';
 
 class MyHomePage extends StatefulWidget {
   const MyHomePage({
@@ -19,20 +20,18 @@ class MyHomePage extends StatefulWidget {
 class _MyHomePageState extends State<MyHomePage> with WindowListener {
   final viewKey = GlobalKey(debugLabel: 'Navigation View Key');
 
-  final List<NavigationPaneItem> originalItems = [
-    PaneItem(
-      key: ValueKey("/"),
-      icon: Icon(FluentIcons.home),
-      title: Text("Home"),
-      body: const SizedBox.shrink(),
-    ),
-    PaneItem(
-      key: ValueKey("/epub-viewer"),
-      icon: Icon(FluentIcons.fabric_picture_library),
-      title: Text("图片浏览器"),
-      body: const SizedBox.shrink(),
+  static const _navigationItems = [
+    AppRoute(path: "/", icon: FluentIcons.home, title: "Home"),
+    AppRoute(
+      path: "/epub-viewer",
+      icon: FluentIcons.fabric_picture_library,
+      title: "图片浏览器",
     ),
   ];
+
+  late final List<NavigationPaneItem> originalItems = _navigationItems
+      .map<NavigationPaneItem>((item) => item.toPaneItem())
+      .toList();
 
   int _calculateSelectedIndex(BuildContext context) {
     final path = GoRouterState.of(context).uri.path;

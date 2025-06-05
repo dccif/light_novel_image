@@ -39,3 +39,21 @@ final router = GoRouter(
     ),
   ],
 );
+
+class AppRoute {
+  const AppRoute({required this.path, required this.icon, required this.title});
+
+  final String path;
+  final IconData icon;
+  final String title;
+
+  // 转换为PaneItem的便捷方法
+  PaneItem toPaneItem() {
+    return PaneItem(
+      key: ValueKey(path),
+      icon: Icon(icon),
+      title: Text(title),
+      body: const SizedBox.shrink(),
+    );
+  }
+}
