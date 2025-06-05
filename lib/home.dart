@@ -19,46 +19,40 @@ class MyHomePage extends StatefulWidget {
 class _MyHomePageState extends State<MyHomePage> with WindowListener {
   final viewKey = GlobalKey(debugLabel: 'Navigation View Key');
 
-  late final List<NavigationPaneItem> originalItems =
-      [
-        PaneItem(
-          key: const ValueKey("/"),
-          icon: const Icon(FluentIcons.home),
-          title: const Text("Home"),
-          body: const SizedBox.shrink(),
-        ),
-      ].map<NavigationPaneItem>((e) {
-        PaneItem buildPaneItem(PaneItem item) {
-          return PaneItem(
-            key: item.key,
-            icon: item.icon,
-            title: item.title,
-            body: item.body,
-            onTap: () {
-              final path = (item.key as ValueKey<String>).value;
-              if (GoRouterState.of(context).uri.path == path) {
-                context.go(path);
-              }
-              item.onTap?.call();
-            },
-          );
-        }
+  final List<NavigationPaneItem> originalItems = [
+    PaneItem(
+      key: ValueKey("/"),
+      icon: Icon(FluentIcons.home),
+      title: Text("Home"),
+      body: const SizedBox.shrink(),
+    ),
+    PaneItem(
+      key: ValueKey("/epub-viewer"),
+      icon: Icon(FluentIcons.fabric_picture_library),
+      title: Text("图片浏览器"),
+      body: const SizedBox.shrink(),
+    ),
+  ];
 
-        if (e is PaneItemExpander) {
-          return PaneItemExpander(
-            key: e.key,
-            icon: e.icon,
-            title: e.title,
-            body: e.body,
-            items: e.items.map((item) {
-              if (item is PaneItem) return buildPaneItem(item);
-              return item;
-            }).toList(),
-          );
-        }
+  int _calculateSelectedIndex(BuildContext context) {
+    final path = GoRouterState.of(context).uri.path;
+    final index = originalItems.indexWhere((item) => item.key == Key(path));
+    return index;
+  }
 
-        return buildPaneItem(e);
-      }).toList();
+  void _onNavigationItemPressed(BuildContext context, int index) {
+    if (index < 0 || index >= originalItems.length) return;
+
+    final key = originalItems[index].key;
+    if (key is! ValueKey<String>) return;
+
+    final targetPath = key.value;
+    final currentPath = GoRouterState.of(context).uri.path;
+
+    if (currentPath != targetPath) {
+      context.go(targetPath);
+    }
+  }
 
   @override
   void initState() {
@@ -74,9 +68,17 @@ class _MyHomePageState extends State<MyHomePage> with WindowListener {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      color: FluentTheme.of(context).micaBackgroundColor,
-      child: widget.child,
+    return NavigationView(
+      pane: NavigationPane(
+        items: originalItems,
+        selected: _calculateSelectedIndex(context),
+        displayMode: PaneDisplayMode.compact,
+        size: NavigationPaneSize(openMaxWidth: 200),
+        onItemPressed: (index) => _onNavigationItemPressed(context, index),
+      ),
+      paneBodyBuilder: (item, child) {
+        return widget.child;
+      },
     );
   }
 }
