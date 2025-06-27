@@ -2,7 +2,7 @@
 
 一个轻小说的EPUB图片浏览器，采用Flutter开发，支持Windows、macOS和Linux桌面平台。
 
-[![Flutter](https://img.shields.io/badge/flutter-3.32.1-blue)](https://flutter.dev/)
+[![Flutter](https://img.shields.io/badge/flutter-3.32.5-blue)](https://flutter.dev/)
 [![Latest Release](https://img.shields.io/github/v/release/dccif/light_novel_image?include_prereleases)](https://github.com/dccif/light_novel_image/releases/latest)
 [![License](https://img.shields.io/github/license/dccif/light_novel_image)](https://github.com/dccif/light_novel_image/blob/main/LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Windows-lightgrey)](https://github.com/dccif/light_novel_image)
