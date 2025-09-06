@@ -9,6 +9,7 @@ class ImageGridWidget extends StatefulWidget {
   final ScrollController? scrollController;
   final int? highlightedIndex; // 高亮显示的图片索引
   final Function(double)? onRowHeightCalculated; // 行高计算完成回调
+  final bool shouldCalculateRowHeight; // 是否应该计算行高
 
   const ImageGridWidget({
     super.key,
@@ -18,6 +19,7 @@ class ImageGridWidget extends StatefulWidget {
     this.scrollController,
     this.highlightedIndex,
     this.onRowHeightCalculated,
+    this.shouldCalculateRowHeight = false,
   });
 
   @override
@@ -30,10 +32,24 @@ class _ImageGridWidgetState extends State<ImageGridWidget> {
   @override
   void initState() {
     super.initState();
-    // 在下一帧计算实际的行高
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _calculateAndReportRowHeight();
-    });
+    // 只有在被明确要求时才计算行高
+    if (widget.shouldCalculateRowHeight) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _calculateAndReportRowHeight();
+      });
+    }
+  }
+
+  @override
+  void didUpdateWidget(ImageGridWidget oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    // 如果shouldCalculateRowHeight从false变为true，触发行高计算
+    if (!oldWidget.shouldCalculateRowHeight &&
+        widget.shouldCalculateRowHeight) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _calculateAndReportRowHeight();
+      });
+    }
   }
 
   /// 计算并报告实际的行高

@@ -33,6 +33,7 @@ class _EpubViewerPageState extends State<EpubViewerPage> {
   int _currentIndex = 0;
   int _currentBookIndex = 0;
   bool _isGridView = true; // 默认显示九宫格视图
+  bool _shouldCalculateRowHeight = false; // 控制是否计算行高
 
   // 排序后的图片数据
   List<Uint8List> _sortedImages = [];
@@ -242,6 +243,13 @@ class _EpubViewerPageState extends State<EpubViewerPage> {
         debugPrint(
           '屏幕分辨率: ${screenWidth.toInt()}x${screenHeight.toInt()}, 限制: ${screenLimitWidth.toInt()}x${screenLimitHeight.toInt()}',
         );
+
+        // 窗口大小调整完成后，通知GridWidget计算行高
+        if (mounted) {
+          setState(() {
+            _shouldCalculateRowHeight = true;
+          });
+        }
       } catch (e) {
         debugPrint('调整窗口大小失败: $e');
         // 如果获取屏幕信息失败，使用默认限制
@@ -253,6 +261,13 @@ class _EpubViewerPageState extends State<EpubViewerPage> {
           debugPrint(
             '使用默认限制调整窗口大小: ${finalWidth.toInt()}x${finalHeight.toInt()}',
           );
+
+          // 窗口大小调整完成后，通知GridWidget计算行高
+          if (mounted) {
+            setState(() {
+              _shouldCalculateRowHeight = true;
+            });
+          }
         } catch (e2) {
           debugPrint('窗口大小调整完全失败: $e2');
         }
@@ -291,12 +306,21 @@ class _EpubViewerPageState extends State<EpubViewerPage> {
 
         // 自动调整窗口大小
         await _adjustWindowSizeToMostCommonResolution();
+
+        // 如果没有统计信息或窗口调整失败，也要允许计算行高
+        if (!_shouldCalculateRowHeight) {
+          setState(() {
+            _shouldCalculateRowHeight = true;
+          });
+        }
       }
     } catch (e) {
       if (mounted) {
         setState(() {
           _isAnalyzingResolutions = false;
           _error = '分析图片分辨率失败: $e';
+          // 即使分析失败，也要允许计算行高
+          _shouldCalculateRowHeight = true;
         });
       }
     }
@@ -579,29 +603,38 @@ class _EpubViewerPageState extends State<EpubViewerPage> {
       );
     }
 
-    if (_isGridView) {
-      return ImageGridWidget(
-        images: _sortedImages.isNotEmpty ? _sortedImages : _images,
-        imageNames: _sortedImageNames.isNotEmpty
-            ? _sortedImageNames
-            : _imageNames,
-        onImageTap: _onImageTap,
-        scrollController: _gridScrollController,
-        highlightedIndex: _currentIndex,
-        onRowHeightCalculated: _onRowHeightCalculated,
-      );
-    } else {
-      return ImageGalleryWidget(
-        images: _sortedImages.isNotEmpty ? _sortedImages : _images,
-        imageNames: _sortedImageNames.isNotEmpty
-            ? _sortedImageNames
-            : _imageNames,
-        initialIndex: _currentIndex,
-        bookIdentifier: _currentBookIdentifier,
-        onEscape: _onGalleryEscape,
-        onIndexChanged: _onGalleryIndexChanged,
-      );
-    }
+    return Stack(
+      children: [
+        Visibility(
+          visible: _isGridView,
+          maintainState: true,
+          child: ImageGridWidget(
+            images: _sortedImages.isNotEmpty ? _sortedImages : _images,
+            imageNames: _sortedImageNames.isNotEmpty
+                ? _sortedImageNames
+                : _imageNames,
+            onImageTap: _onImageTap,
+            scrollController: _gridScrollController,
+            highlightedIndex: _currentIndex,
+            onRowHeightCalculated: _onRowHeightCalculated,
+            shouldCalculateRowHeight: _shouldCalculateRowHeight,
+          ),
+        ),
+        Visibility(
+          visible: !_isGridView,
+          child: ImageGalleryWidget(
+            images: _sortedImages.isNotEmpty ? _sortedImages : _images,
+            imageNames: _sortedImageNames.isNotEmpty
+                ? _sortedImageNames
+                : _imageNames,
+            initialIndex: _currentIndex,
+            bookIdentifier: _currentBookIdentifier,
+            onEscape: _onGalleryEscape,
+            onIndexChanged: _onGalleryIndexChanged,
+          ),
+        ),
+      ],
+    );
   }
 
   Widget _buildFooter() {
