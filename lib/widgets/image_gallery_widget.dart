@@ -1,5 +1,6 @@
 import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter/gestures.dart';
 import 'package:photo_view/photo_view.dart';
 import 'package:photo_view/photo_view_gallery.dart';
 
@@ -100,37 +101,48 @@ class ImageGalleryWidget extends StatelessWidget {
           },
           child: FlyoutTarget(
             controller: flyoutController,
-            child: GestureDetector(
-              onSecondaryTapDown: (details) {
-                // 显示 Fluent UI 右键菜单
-                Offset position = details.localPosition;
-                position = Offset(position.dx + 20, position.dy + 70);
-
-                flyoutController.showFlyout(
-                  position: position,
-                  builder: (context) {
-                    return MenuFlyout(items: _buildContextMenuItems());
-                  },
-                );
+            child: Listener(
+              onPointerSignal: (pointerSignal) {
+                if (pointerSignal is PointerScrollEvent) {
+                  if (pointerSignal.scrollDelta.dy > 0) {
+                    onNextImage();
+                  } else if (pointerSignal.scrollDelta.dy < 0) {
+                    onPreviousImage();
+                  }
+                }
               },
-              child: PhotoViewGallery.builder(
-                scrollPhysics: const BouncingScrollPhysics(),
-                builder: (BuildContext context, int index) {
-                  return PhotoViewGalleryPageOptions(
-                    imageProvider: MemoryImage(images[index]),
-                    initialScale: PhotoViewComputedScale.contained,
-                    minScale: PhotoViewComputedScale.contained * 0.1,
-                    maxScale: PhotoViewComputedScale.covered * 4.0,
-                    heroAttributes: PhotoViewHeroAttributes(tag: index),
+              child: GestureDetector(
+                onSecondaryTapDown: (details) {
+                  // 显示 Fluent UI 右键菜单
+                  Offset position = details.localPosition;
+                  position = Offset(position.dx + 20, position.dy + 70);
+
+                  flyoutController.showFlyout(
+                    position: position,
+                    builder: (context) {
+                      return MenuFlyout(items: _buildContextMenuItems());
+                    },
                   );
                 },
-                itemCount: images.length,
-                loadingBuilder: (context, event) =>
-                    const Center(child: ProgressRing()),
-                pageController: pageController,
-                onPageChanged: onPageChanged,
-                backgroundDecoration: const BoxDecoration(
-                  color: Colors.transparent,
+                child: PhotoViewGallery.builder(
+                  scrollPhysics: const BouncingScrollPhysics(),
+                  builder: (BuildContext context, int index) {
+                    return PhotoViewGalleryPageOptions(
+                      imageProvider: MemoryImage(images[index]),
+                      initialScale: PhotoViewComputedScale.contained,
+                      minScale: PhotoViewComputedScale.contained * 0.1,
+                      maxScale: PhotoViewComputedScale.covered * 4.0,
+                      heroAttributes: PhotoViewHeroAttributes(tag: index),
+                    );
+                  },
+                  itemCount: images.length,
+                  loadingBuilder: (context, event) =>
+                      const Center(child: ProgressRing()),
+                  pageController: pageController,
+                  onPageChanged: onPageChanged,
+                  backgroundDecoration: const BoxDecoration(
+                    color: Colors.transparent,
+                  ),
                 ),
               ),
             ),
