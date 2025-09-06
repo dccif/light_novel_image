@@ -110,7 +110,7 @@ class _ImageGalleryWidgetState extends State<ImageGalleryWidget> {
       _currentIndex--;
       _pageController.animateToPage(
         _currentIndex,
-        duration: const Duration(milliseconds: 300),
+        duration: const Duration(milliseconds: 80),
         curve: Curves.easeInOut,
       );
       // 通知外部索引变化
@@ -123,7 +123,7 @@ class _ImageGalleryWidgetState extends State<ImageGalleryWidget> {
       _currentIndex++;
       _pageController.animateToPage(
         _currentIndex,
-        duration: const Duration(milliseconds: 300),
+        duration: const Duration(milliseconds: 80),
         curve: Curves.easeInOut,
       );
       // 通知外部索引变化
