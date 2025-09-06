@@ -9,6 +9,7 @@ import 'package:light_novel_image/services/epub_parser_service.dart';
 import 'package:light_novel_image/services/image_resolution_service.dart';
 import 'package:light_novel_image/services/system_viewer_service.dart';
 import 'package:light_novel_image/widgets/image_gallery_widget.dart';
+import 'package:light_novel_image/widgets/image_grid_widget.dart';
 
 class EpubViewerPage extends StatefulWidget {
   final List<String> epubPaths;
@@ -24,13 +25,26 @@ class _EpubViewerPageState extends State<EpubViewerPage> {
   List<String> _imageNames = [];
   List<BookInfo> _books = [];
   List<int> _imageBookIndexes = [];
+  List<ImageResolution> _imageResolutions = [];
   ResolutionStatistics? _resolutionStatistics;
   bool _isLoading = true;
   bool _isAnalyzingResolutions = false;
   String? _error;
   int _currentIndex = 0;
   int _currentBookIndex = 0;
-  final PageController _pageController = PageController();
+  bool _isGridView = true; // 默认显示九宫格视图
+
+  // 排序后的图片数据
+  List<Uint8List> _sortedImages = [];
+  List<String> _sortedImageNames = [];
+  List<int> _sortedImageBookIndexes = [];
+  List<int> _sortedIndices = []; // 原始索引到排序索引的映射
+
+  // 保存GridView的滚动位置
+  final ScrollController _gridScrollController = ScrollController();
+
+  // 缓存计算出的实际行高
+  double? _cachedRowHeight;
 
   @override
   void initState() {
@@ -41,7 +55,7 @@ class _EpubViewerPageState extends State<EpubViewerPage> {
 
   @override
   void dispose() {
-    _pageController.dispose();
+    _gridScrollController.dispose();
     SystemViewerService.cleanupTempFiles();
     super.dispose();
   }
@@ -108,10 +122,42 @@ class _EpubViewerPageState extends State<EpubViewerPage> {
     return title;
   }
 
+  /// 根据图片分辨率对图片进行排序
+  void _sortImages() {
+    if (_imageResolutions.isEmpty ||
+        _imageResolutions.length != _images.length) {
+      // 如果没有分辨率信息，保持原始顺序
+      _sortedImages = List.from(_images);
+      _sortedImageNames = List.from(_imageNames);
+      _sortedImageBookIndexes = List.from(_imageBookIndexes);
+      _sortedIndices = List.generate(_images.length, (index) => index);
+      return;
+    }
+
+    // 按面积（宽*高）从大到小排序
+    final List<MapEntry<int, int>> indexAreaPairs = [];
+    for (int i = 0; i < _images.length; i++) {
+      final area = _imageResolutions[i].width * _imageResolutions[i].height;
+      indexAreaPairs.add(MapEntry(i, area));
+    }
+
+    indexAreaPairs.sort((a, b) => b.value.compareTo(a.value));
+    _sortedIndices = indexAreaPairs.map((e) => e.key).toList();
+
+    // 根据排序后的索引重新排列所有相关数据
+    _sortedImages = _sortedIndices.map((index) => _images[index]).toList();
+    _sortedImageNames = _sortedIndices
+        .map((index) => _imageNames[index])
+        .toList();
+    _sortedImageBookIndexes = _sortedIndices
+        .map((index) => _imageBookIndexes[index])
+        .toList();
+  }
+
   void _updateCurrentBook() {
-    if (_imageBookIndexes.isNotEmpty &&
-        _currentIndex < _imageBookIndexes.length) {
-      final newBookIndex = _imageBookIndexes[_currentIndex];
+    if (_sortedImageBookIndexes.isNotEmpty &&
+        _currentIndex < _sortedImageBookIndexes.length) {
+      final newBookIndex = _sortedImageBookIndexes[_currentIndex];
       if (newBookIndex != _currentBookIndex) {
         setState(() {
           _currentBookIndex = newBookIndex;
@@ -120,111 +166,31 @@ class _EpubViewerPageState extends State<EpubViewerPage> {
     }
   }
 
-  Future<void> _openInSystemViewer() async {
-    if (_currentIndex >= _images.length) return;
-
-    // 获取当前书籍标识符
-    String? bookIdentifier;
+  String? get _currentBookIdentifier {
     if (_books.isNotEmpty && _currentBookIndex < _books.length) {
-      bookIdentifier = _books[_currentBookIndex].title;
+      return _books[_currentBookIndex].title;
     }
-
-    await SystemViewerService.openImageInSystemViewer(
-      _images[_currentIndex],
-      _imageNames[_currentIndex],
-      bookIdentifier,
-    );
+    return null;
   }
 
-  /// 复制当前图片到剪贴板
-  Future<void> _copyToClipboard(String imageName) async {
-    if (_currentIndex >= _images.length) return;
-
-    // 获取当前书籍标识符
-    String? bookIdentifier;
-    if (_books.isNotEmpty && _currentBookIndex < _books.length) {
-      bookIdentifier = _books[_currentBookIndex].title;
-    }
-
-    try {
-      await SystemViewerService.copyFileToClipboard(
-        _images[_currentIndex],
-        imageName,
-        bookIdentifier,
-      );
-
-      // 显示成功提示
-      if (mounted) {
-        displayInfoBar(
-          context,
-          builder: (context, close) {
-            return InfoBar(
-              title: const Text('成功'),
-              content: Text('图片 "$imageName" 已复制到剪贴板'),
-              severity: InfoBarSeverity.success,
-              action: IconButton(
-                icon: const Icon(FluentIcons.clear),
-                onPressed: close,
-              ),
-            );
-          },
-        );
-      }
-    } catch (e) {
-      // 显示错误提示
-      if (mounted) {
-        displayInfoBar(
-          context,
-          builder: (context, close) {
-            return InfoBar(
-              title: const Text('复制失败'),
-              content: Text('无法复制图片到剪贴板: $e'),
-              severity: InfoBarSeverity.error,
-              action: IconButton(
-                icon: const Icon(FluentIcons.clear),
-                onPressed: close,
-              ),
-            );
-          },
-        );
-      }
-    }
+  void _onImageTap(int imageIndex) {
+    setState(() {
+      _currentIndex = imageIndex;
+      _isGridView = false;
+    });
+    _updateCurrentBook();
   }
 
-  /// 显示选择打开方式对话框
-  Future<void> _openWithDialog(String imageName) async {
-    if (_currentIndex >= _images.length) return;
+  void _toggleView() {
+    setState(() {
+      _isGridView = !_isGridView;
+    });
 
-    // 获取当前书籍标识符
-    String? bookIdentifier;
-    if (_books.isNotEmpty && _currentBookIndex < _books.length) {
-      bookIdentifier = _books[_currentBookIndex].title;
-    }
-
-    try {
-      await SystemViewerService.openImageWithDialog(
-        _images[_currentIndex],
-        imageName,
-        bookIdentifier,
-      );
-    } catch (e) {
-      // 显示错误提示
-      if (mounted) {
-        displayInfoBar(
-          context,
-          builder: (context, close) {
-            return InfoBar(
-              title: const Text('打开失败'),
-              content: Text('无法打开选择应用程序对话框: $e'),
-              severity: InfoBarSeverity.error,
-              action: IconButton(
-                icon: const Icon(FluentIcons.clear),
-                onPressed: close,
-              ),
-            );
-          },
-        );
-      }
+    // 如果切换到九宫格视图，滚动到当前图片所在行
+    if (_isGridView) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _scrollToCurrentImageRow();
+      });
     }
   }
 
@@ -315,9 +281,13 @@ class _EpubViewerPageState extends State<EpubViewerPage> {
 
       if (mounted) {
         setState(() {
+          _imageResolutions = resolutions;
           _resolutionStatistics = statistics;
           _isAnalyzingResolutions = false;
         });
+
+        // 对图片进行排序
+        _sortImages();
 
         // 自动调整窗口大小
         await _adjustWindowSizeToMostCommonResolution();
@@ -364,35 +334,141 @@ class _EpubViewerPageState extends State<EpubViewerPage> {
     }
   }
 
-  void _previousImage() {
-    if (_currentIndex > 0) {
-      _currentIndex--;
-      _pageController.animateToPage(
-        _currentIndex,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeInOut,
-      );
-      _updateCurrentBook();
-    }
-  }
-
-  void _nextImage() {
-    if (_currentIndex < _images.length - 1) {
-      _currentIndex++;
-      _pageController.animateToPage(
-        _currentIndex,
-        duration: const Duration(milliseconds: 300),
-        curve: Curves.easeInOut,
-      );
-      _updateCurrentBook();
-    }
-  }
-
-  void _onPageChanged(int index) {
+  void _onGalleryEscape() {
     setState(() {
-      _currentIndex = index;
+      _isGridView = true;
     });
-    _updateCurrentBook();
+
+    // 返回九宫格时，立即滚动到当前图片所在行的居中位置
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _scrollToCurrentImageRow();
+    });
+  }
+
+  /// 处理图片查看器中的索引变化
+  void _onGalleryIndexChanged(int newIndex) {
+    if (_currentIndex != newIndex) {
+      setState(() {
+        _currentIndex = newIndex;
+      });
+      _updateCurrentBook();
+      debugPrint('图片查看器索引变化: $_currentIndex');
+    }
+  }
+
+  /// 滚动到当前图片所在行，使其尽可能居中显示
+  void _scrollToCurrentImageRow() {
+    if (!_gridScrollController.hasClients) return;
+
+    // 等待GridView完全构建后再计算滚动位置
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _performScrollToCurrentRow();
+    });
+  }
+
+  /// 执行实际的滚动操作，使用动态计算的行高
+  void _performScrollToCurrentRow() {
+    if (!_gridScrollController.hasClients) return;
+
+    const int itemsPerRow = 3;
+    final int totalImages = _sortedImages.isNotEmpty
+        ? _sortedImages.length
+        : _images.length;
+
+    if (totalImages == 0) return;
+
+    // 计算当前图片在第几行（从0开始）
+    final int currentRow = _currentIndex ~/ itemsPerRow;
+    final int totalRows = (totalImages + itemsPerRow - 1) ~/ itemsPerRow;
+
+    // 使用缓存的行高或动态计算
+    double actualRowHeight = _cachedRowHeight ?? _calculateActualRowHeight();
+
+    // 如果无法计算实际行高，使用估算值
+    if (actualRowHeight <= 0) {
+      actualRowHeight = 128.0; // 默认估算值
+    }
+
+    // 获取可视区域高度
+    final double viewportHeight =
+        _gridScrollController.position.viewportDimension;
+    final double visibleRows = viewportHeight / actualRowHeight;
+
+    double targetOffset;
+
+    if (totalRows <= visibleRows) {
+      // 如果总行数小于等于可视行数，滚动到顶部
+      targetOffset = 0.0;
+    } else {
+      // 计算让当前行居中的滚动位置
+      final double centerOffset =
+          (currentRow * actualRowHeight) -
+          (viewportHeight / 2) +
+          (actualRowHeight / 2);
+
+      // 确保滚动位置在有效范围内
+      final double maxScrollExtent =
+          _gridScrollController.position.maxScrollExtent;
+      targetOffset = centerOffset.clamp(0.0, maxScrollExtent);
+    }
+
+    debugPrint('滚动到行 $currentRow，使用行高 $actualRowHeight，目标位置 $targetOffset');
+
+    // 立即跳转到目标位置，不使用动画
+    _gridScrollController.jumpTo(targetOffset);
+  }
+
+  /// 行高计算完成的回调
+  void _onRowHeightCalculated(double rowHeight) {
+    _cachedRowHeight = rowHeight;
+    debugPrint('收到GridWidget计算的行高: $rowHeight');
+
+    // 如果需要滚动，现在使用准确的行高重新计算
+    if (_isGridView && !_isLoading) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        _performScrollToCurrentRow();
+      });
+    }
+  }
+
+  /// 动态计算实际的网格行高
+  double _calculateActualRowHeight() {
+    try {
+      // 如果GridView还没有内容，返回0
+      if (!_gridScrollController.hasClients) return 0.0;
+
+      final ScrollPosition position = _gridScrollController.position;
+
+      // 获取总的可滚动内容高度
+      final double maxScrollExtent = position.maxScrollExtent;
+      final double viewportHeight = position.viewportDimension;
+      final double totalContentHeight = maxScrollExtent + viewportHeight;
+
+      const int itemsPerRow = 3;
+      final int totalImages = _sortedImages.isNotEmpty
+          ? _sortedImages.length
+          : _images.length;
+      final int totalRows = (totalImages + itemsPerRow - 1) ~/ itemsPerRow;
+
+      if (totalRows <= 0) return 0.0;
+
+      // 计算平均行高（包括padding）
+      const double topPadding = 8.0; // GridView的顶部padding
+      const double bottomPadding = 8.0; // GridView的底部padding
+      final double contentHeight =
+          totalContentHeight - topPadding - bottomPadding;
+
+      final double averageRowHeight = contentHeight / totalRows;
+
+      debugPrint(
+        '动态计算行高: $averageRowHeight (总内容高度: $totalContentHeight, 行数: $totalRows)',
+      );
+
+      return averageRowHeight;
+    } catch (e) {
+      debugPrint('计算实际行高失败: $e');
+      return 0.0;
+    }
   }
 
   @override
@@ -404,7 +480,7 @@ class _EpubViewerPageState extends State<EpubViewerPage> {
           _buildHeader(),
           const SizedBox(height: 8),
           Expanded(child: _buildContent()),
-          if (!_isLoading && _images.isNotEmpty) _buildFooter(),
+          if (!_isLoading && _images.isNotEmpty && _isGridView) _buildFooter(),
         ],
       ),
     );
@@ -430,10 +506,30 @@ class _EpubViewerPageState extends State<EpubViewerPage> {
         ),
         const SizedBox(width: 16),
         if (!_isLoading && _images.isNotEmpty) ...[
-          Text(
-            '${_currentIndex + 1} / ${_images.length}',
-            style: FluentTheme.of(context).typography.body,
+          Button(
+            onPressed: _toggleView,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  _isGridView ? FluentIcons.view : FluentIcons.grid_view_medium,
+                ),
+                const SizedBox(width: 4),
+                Text(_isGridView ? '查看器' : '九宫格'),
+              ],
+            ),
           ),
+          const SizedBox(width: 8),
+          if (_isGridView)
+            Text(
+              '共 ${_sortedImages.isNotEmpty ? _sortedImages.length : _images.length} 张图片',
+              style: FluentTheme.of(context).typography.body,
+            )
+          else
+            Text(
+              '${_currentIndex + 1} / ${_sortedImages.isNotEmpty ? _sortedImages.length : _images.length}',
+              style: FluentTheme.of(context).typography.body,
+            ),
         ],
         if (_isAnalyzingResolutions) ...[
           const SizedBox(width: 8),
@@ -483,19 +579,29 @@ class _EpubViewerPageState extends State<EpubViewerPage> {
       );
     }
 
-    return ImageGalleryWidget(
-      images: _images,
-      imageNames: _imageNames,
-      pageController: _pageController,
-      currentIndex: _currentIndex,
-      onPageChanged: _onPageChanged,
-      onOpenInSystemViewer: _openInSystemViewer,
-      onPreviousImage: _previousImage,
-      onNextImage: _nextImage,
-      onCopyToClipboard: _copyToClipboard,
-      onOpenWithDialog: _openWithDialog,
-      onEscape: _goBackHome,
-    );
+    if (_isGridView) {
+      return ImageGridWidget(
+        images: _sortedImages.isNotEmpty ? _sortedImages : _images,
+        imageNames: _sortedImageNames.isNotEmpty
+            ? _sortedImageNames
+            : _imageNames,
+        onImageTap: _onImageTap,
+        scrollController: _gridScrollController,
+        highlightedIndex: _currentIndex,
+        onRowHeightCalculated: _onRowHeightCalculated,
+      );
+    } else {
+      return ImageGalleryWidget(
+        images: _sortedImages.isNotEmpty ? _sortedImages : _images,
+        imageNames: _sortedImageNames.isNotEmpty
+            ? _sortedImageNames
+            : _imageNames,
+        initialIndex: _currentIndex,
+        bookIdentifier: _currentBookIdentifier,
+        onEscape: _onGalleryEscape,
+        onIndexChanged: _onGalleryIndexChanged,
+      );
+    }
   }
 
   Widget _buildFooter() {
@@ -504,35 +610,12 @@ class _EpubViewerPageState extends State<EpubViewerPage> {
       child: Row(
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          Button(
-            onPressed: _currentIndex > 0 ? _previousImage : null,
-            child: const Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(FluentIcons.chevron_left),
-                SizedBox(width: 4),
-                Text('上一张'),
-              ],
-            ),
-          ),
-          const SizedBox(width: 16),
-          if (_images.isNotEmpty)
+          if (_resolutionStatistics != null &&
+              _resolutionStatistics!.mostCommonResolution != null)
             Text(
-              _imageNames[_currentIndex],
+              '最常见分辨率: ${_resolutionStatistics!.mostCommonResolution} (${_resolutionStatistics!.mostCommonResolutionCount}张)',
               style: FluentTheme.of(context).typography.caption,
             ),
-          const SizedBox(width: 16),
-          Button(
-            onPressed: _currentIndex < _images.length - 1 ? _nextImage : null,
-            child: const Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text('下一张'),
-                SizedBox(width: 4),
-                Icon(FluentIcons.chevron_right),
-              ],
-            ),
-          ),
         ],
       ),
     );
