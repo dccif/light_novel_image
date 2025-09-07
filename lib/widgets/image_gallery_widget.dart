@@ -31,11 +31,17 @@ class _ImageGalleryWidgetState extends State<ImageGalleryWidget> {
   late int _currentIndex;
   final Set<int> _preloadedImages = <int>{};
 
+  // 缓存控制器和焦点节点，避免每次 build 都创建新实例
+  late final FlyoutController _flyoutController;
+  late final FocusNode _focusNode;
+
   @override
   void initState() {
     super.initState();
     _currentIndex = widget.initialIndex;
     _pageController = ExtendedPageController(initialPage: _currentIndex);
+    _flyoutController = FlyoutController();
+    _focusNode = FocusNode();
     // 预加载当前图片和前后一张图片
     _preloadImages(_currentIndex);
   }
@@ -43,6 +49,7 @@ class _ImageGalleryWidgetState extends State<ImageGalleryWidget> {
   @override
   void dispose() {
     _pageController.dispose();
+    _focusNode.dispose();
     super.dispose();
   }
 
@@ -221,6 +228,34 @@ class _ImageGalleryWidgetState extends State<ImageGalleryWidget> {
     }
   }
 
+  /// 构建手势配置（缓存以避免重复创建）
+  static GestureConfig _buildGestureConfig(ExtendedImageState state) {
+    return GestureConfig(
+      // 启用缩放功能
+      minScale: 0.8,
+      animationMinScale: 0.8,
+      maxScale: 5.0,
+      animationMaxScale: 5.0,
+      speed: 1.0,
+      inertialSpeed: 100.0,
+      initialScale: 1.0,
+      inPageView: true,
+      initialAlignment: InitialAlignment.center,
+    );
+  }
+
+  /// 构建加载状态组件（使用 const 优化）
+  static Widget? _buildLoadStateWidget(ExtendedImageState state) {
+    switch (state.extendedImageLoadState) {
+      case LoadState.loading:
+        return const Center(child: ProgressRing());
+      case LoadState.completed:
+        return null;
+      case LoadState.failed:
+        return const Center(child: Icon(FluentIcons.error, size: 48));
+    }
+  }
+
   List<MenuFlyoutItemBase> _buildContextMenuItems() {
     final String currentImageName = widget.imageNames[_currentIndex];
 
@@ -238,7 +273,7 @@ class _ImageGalleryWidgetState extends State<ImageGalleryWidget> {
           MenuFlyoutItem(
             leading: const Icon(FluentIcons.view, size: 16),
             text: const Text('系统默认查看器'),
-            onPressed: () => _openInSystemViewer(),
+            onPressed: _openInSystemViewer,
           ),
           MenuFlyoutItem(
             leading: const Icon(FluentIcons.open_with, size: 16),
@@ -258,8 +293,6 @@ class _ImageGalleryWidgetState extends State<ImageGalleryWidget> {
 
   @override
   Widget build(BuildContext context) {
-    final flyoutController = FlyoutController();
-
     return Container(
       decoration: BoxDecoration(
         color: FluentTheme.of(context).cardColor,
@@ -269,6 +302,7 @@ class _ImageGalleryWidgetState extends State<ImageGalleryWidget> {
       child: ClipRRect(
         borderRadius: BorderRadius.circular(8),
         child: Focus(
+          focusNode: _focusNode,
           autofocus: true,
           onKeyEvent: (node, event) {
             if (event is KeyDownEvent) {
@@ -289,10 +323,20 @@ class _ImageGalleryWidgetState extends State<ImageGalleryWidget> {
             return KeyEventResult.ignored;
           },
           child: FlyoutTarget(
-            controller: flyoutController,
+            controller: _flyoutController,
             child: Listener(
               onPointerSignal: (pointerSignal) {
                 if (pointerSignal is PointerScrollEvent) {
+                  // 直接检测 Ctrl 键状态，避免状态管理
+                  final isCtrlPressed =
+                      HardwareKeyboard.instance.isControlPressed;
+
+                  // 如果按住了 Ctrl 键，让 ExtendedImage 处理缩放
+                  if (isCtrlPressed) {
+                    // 不处理滚轮事件，让 ExtendedImage 的缩放功能接管
+                    return;
+                  }
+
                   // 只处理垂直滚动，忽略水平滚动
                   final verticalDelta = pointerSignal.scrollDelta.dy;
                   if (verticalDelta.abs() > 10) {
@@ -311,7 +355,7 @@ class _ImageGalleryWidgetState extends State<ImageGalleryWidget> {
                   Offset position = details.localPosition;
                   position = Offset(position.dx + 20, position.dy + 70);
 
-                  flyoutController.showFlyout(
+                  _flyoutController.showFlyout(
                     position: position,
                     builder: (context) {
                       return MenuFlyout(items: _buildContextMenuItems());
@@ -329,34 +373,8 @@ class _ImageGalleryWidgetState extends State<ImageGalleryWidget> {
                       widget.images[index],
                       fit: BoxFit.contain,
                       mode: ExtendedImageMode.gesture,
-                      initGestureConfigHandler: (ExtendedImageState state) {
-                        return GestureConfig(
-                          // 禁用缩放功能 - 最小和最大缩放都设为1.0
-                          minScale: 1.0,
-                          animationMinScale: 1.0,
-                          maxScale: 1.0,
-                          animationMaxScale: 1.0,
-                          speed: 1.0,
-                          inertialSpeed: 100.0,
-                          initialScale: 1.0,
-                          inPageView: true,
-                          initialAlignment: InitialAlignment.center,
-                          // 禁用所有手势交互，只保留PageView的滑动
-                          gestureDetailsIsChanged: null,
-                        );
-                      },
-                      loadStateChanged: (ExtendedImageState state) {
-                        switch (state.extendedImageLoadState) {
-                          case LoadState.loading:
-                            return const Center(child: ProgressRing());
-                          case LoadState.completed:
-                            return null;
-                          case LoadState.failed:
-                            return const Center(
-                              child: Icon(FluentIcons.error, size: 48),
-                            );
-                        }
-                      },
+                      initGestureConfigHandler: _buildGestureConfig,
+                      loadStateChanged: _buildLoadStateWidget,
                     );
                   },
                 ),
