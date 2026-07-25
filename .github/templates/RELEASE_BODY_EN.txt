@@ -50,7 +50,7 @@
 ## System Requirements
 - **Windows**: Windows 10 or later, Visual C++ Redistributable
 - **macOS ARM64**: macOS 11.0 or later, Apple Silicon processor
-- **macOS Intel**: macOS 10.14.6 or later, Intel 64-bit processor
+- **macOS Intel**: macOS 10.15 or later, Intel 64-bit processor
 
 ## Updates
 Please check the commit history for detailed update information.

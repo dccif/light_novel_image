@@ -68,7 +68,7 @@ jobs:
     
     steps:
     - name: 检出代码
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
         fetch-depth: 0
@@ -131,6 +131,11 @@ jobs:
         flutter-version: '3.44.8'
         channel: 'stable'
         cache: true
+
+    - name: 设置 macOS 最低部署版本
+      if: matrix.platform == 'macos'
+      run: echo "MACOSX_DEPLOYMENT_TARGET=10.15" >> $GITHUB_ENV
+      shell: bash
         
     - name: 启用桌面支持
       run: |
@@ -262,7 +267,7 @@ jobs:
       
     - name: 上传构建产物 (Windows)
       if: matrix.platform == 'windows'
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: ${{ steps.version.outputs.BUILD_NAME }}
         path: ${{ steps.package-win.outputs.ZIP_NAME }}
@@ -270,7 +275,7 @@ jobs:
         
     - name: 上传构建产物 (macOS)
       if: matrix.platform == 'macos'
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v6
       with:
         name: ${{ steps.version.outputs.BUILD_NAME }}
         path: ${{ steps.package-mac.outputs.ZIP_NAME }}
@@ -283,10 +288,10 @@ jobs:
     
     steps:
     - name: 检出代码
-      uses: actions/checkout@v4
+      uses: actions/checkout@v6
       
     - name: 下载所有构建产物
-      uses: actions/download-artifact@v4
+      uses: actions/download-artifact@v8
       with:
         path: artifacts
         
@@ -349,7 +354,7 @@ jobs:
         echo "EOF" >> $GITHUB_OUTPUT
         
     - name: 创建Release
-      uses: softprops/action-gh-release@v2
+      uses: softprops/action-gh-release@v3
       with:
         files: artifacts/*/*
         tag_name: v${{ github.event.inputs.version }}

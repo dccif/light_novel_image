@@ -42,7 +42,7 @@
 
 - Flutter SDK 3.44.8 或更高版本
 - Dart SDK 3.12.2 或更高版本
-- 理论上支持的操作系统：Windows 10+、macOS 10.14+、Linux (Ubuntu 18.04+)
+- 理论上支持的操作系统：Windows 10+、macOS 10.15+、Linux (Ubuntu 18.04+)
 
 ### 安装步骤
 

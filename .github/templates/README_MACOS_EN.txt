@@ -11,7 +11,7 @@
 3. On first run, you may need to allow the app in System Preferences > Security & Privacy
 
 ## System Requirements
-- macOS 10.14.6 or higher
+- macOS 10.15 or later
 - 64-bit processor (Intel or Apple Silicon)
 
 ## Features

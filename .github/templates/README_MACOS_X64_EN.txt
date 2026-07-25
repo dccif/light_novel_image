@@ -12,7 +12,7 @@
 3. On first launch, you may need to allow the app to run in System Preferences > Security & Privacy
 
 ## System Requirements
-- macOS 10.14.6 or later
+- macOS 10.15 or later
 - Intel 64-bit processor
 
 ## Features
