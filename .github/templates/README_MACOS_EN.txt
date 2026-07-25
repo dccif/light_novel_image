@@ -15,6 +15,9 @@
 - 64-bit processor (Intel or Apple Silicon)
 
 ## Features
+- Image context reading with the image's original EPUB position marked
+- Floating return button when the image position leaves the visible text area
+- Left and right arrow navigation in both image and text panels
 - Support for EPUB file image viewing
 - Drag and drop operation
 - Image zoom and viewing
@@ -34,4 +37,4 @@
 - File system access permissions are required to read EPUB files
 
 ## Support & Feedback
-If you encounter issues or have suggestions, please submit an Issue on the GitHub project page. 
+If you encounter issues or have suggestions, please submit an Issue on the GitHub project page.

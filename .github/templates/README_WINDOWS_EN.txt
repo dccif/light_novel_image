@@ -10,6 +10,9 @@
 - Visual C++ Redistributable (usually included with system)
 
 ## Features
+- Image context reading: view the EPUB text around an image with its original position marked
+- One-click return: use the floating button to return to an off-screen image position
+- Keyboard navigation: left and right arrow keys work in both the image and text panels
 - Support for EPUB file image viewing
 - Drag and drop operation
 - Image zoom and viewing
@@ -30,4 +33,4 @@ For more information, visit: https://github.com/{{REPOSITORY}}
 
 ---
 Build Time: {{BUILD_TIME}}
-Version: {{VERSION}} 
+Version: {{VERSION}}

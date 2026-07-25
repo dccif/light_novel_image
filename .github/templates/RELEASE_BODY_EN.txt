@@ -31,6 +31,9 @@
 3. On first launch, you may need to allow the app to run in System Preferences > Security & Privacy
 
 ## Features
+- Image context reading with the image's original EPUB position marked
+- Floating return button when the image position leaves the visible text area
+- Left and right arrow navigation in both image and text panels
 - EPUB image browsing support
 - Drag and drop operations
 - Image zoom and view
@@ -54,4 +57,4 @@ Please check the commit history for detailed update information.
 
 ---
 Release Time: {{BUILD_TIME}}
-Repository: https://github.com/{{REPOSITORY}} 
+Repository: https://github.com/{{REPOSITORY}}

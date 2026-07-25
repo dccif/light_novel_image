@@ -4,11 +4,9 @@
 
 ## 🔄 工作流类型
 
-### 1. `build-windows.yml` - 持续集成构建
-- **触发条件**: 推送到 main/master 分支、创建标签、Pull Request
-- **功能**: 自动构建、测试、分析代码，并上传构建产物
-- **产物保留**: 30天
-- **自动发布**: 当推送标签时自动创建GitHub Release
+### 1. `flutter.yml` - 代码分析与测试
+- **触发条件**: 手动触发
+- **功能**: 获取依赖、运行静态分析和测试
 
 ### 2. `release.yml` - 正式发布构建  
 - **触发条件**: 创建GitHub Release 或 手动触发
@@ -26,13 +24,13 @@
 
 ### 自动构建
 1. 推送代码到main分支 → 自动触发CI构建
-2. 创建标签 `git tag v1.0.0 && git push origin v1.0.0` → 自动发布
+2. 创建发布版本时，使用 `Release Build` 并输入版本号（例如 `1.0.7`）
 
 ### 手动发布
 1. 进入GitHub仓库 → Actions标签页
 2. 选择"Release Build"工作流
 3. 点击"Run workflow"
-4. 输入版本号（如：1.0.0）
+4. 输入版本号（如：1.0.7）
 5. 点击"Run workflow"开始构建
 
 ### 快速测试构建
@@ -45,7 +43,7 @@
 
 ### 文件结构
 ```
-light_novel_image-v1.0.0-windows-x64.zip
+light_novel_image-v1.0.7-windows-x64.zip
 ├── light_novel_image.exe          # 主程序
 ├── flutter_windows.dll            # Flutter运行时
 ├── data/                          # 应用数据
@@ -62,7 +60,7 @@ light_novel_image-v1.0.0-windows-x64.zip
 ## 🔧 配置说明
 
 ### Flutter版本
-- 当前使用: `3.35.3`
+- 当前使用: `3.44.8`
 - 渠道: `stable`
 - 支持缓存以加速构建
 
@@ -86,4 +84,4 @@ light_novel_image-v1.0.0-windows-x64.zip
 - `actions: read` - 读取Actions
 - `packages: write` - 写入包（如果需要）
 
-GitHub Actions会自动提供`GITHUB_TOKEN`用于发布。 
+GitHub Actions会自动提供`GITHUB_TOKEN`用于发布。

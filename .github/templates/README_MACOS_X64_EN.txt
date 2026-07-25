@@ -16,6 +16,9 @@
 - Intel 64-bit processor
 
 ## Features
+- Image context reading with the image's original EPUB position marked
+- Floating return button when the image position leaves the visible text area
+- Left and right arrow navigation in both image and text panels
 - EPUB image browsing support
 - Drag and drop operations
 - Image zoom and view
@@ -38,4 +41,4 @@
 - If you are using an Apple Silicon Mac, it is recommended to download the ARM64 version for better performance
 
 ## Support & Feedback
-If you encounter any issues or have suggestions, please submit an Issue on the GitHub project page. 
+If you encounter any issues or have suggestions, please submit an Issue on the GitHub project page.

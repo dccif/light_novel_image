@@ -2,11 +2,14 @@ import 'package:fluent_ui/fluent_ui.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/gestures.dart';
 import 'package:extended_image/extended_image.dart';
+import 'package:light_novel_image/models/image_context.dart';
 import 'package:light_novel_image/services/system_viewer_service.dart';
+import 'package:light_novel_image/utils/scroll_visibility.dart';
 
 class ImageGalleryWidget extends StatefulWidget {
   final List<Uint8List> images;
   final List<String> imageNames;
+  final List<ImageContext?> imageContexts;
   final int initialIndex;
   final VoidCallback? onEscape;
   final String? bookIdentifier;
@@ -16,6 +19,7 @@ class ImageGalleryWidget extends StatefulWidget {
     super.key,
     required this.images,
     required this.imageNames,
+    required this.imageContexts,
     required this.initialIndex,
     this.onEscape,
     this.bookIdentifier,
@@ -30,6 +34,19 @@ class _ImageGalleryWidgetState extends State<ImageGalleryWidget> {
   late ExtendedPageController _pageController;
   late int _currentIndex;
   final Set<int> _preloadedImages = <int>{};
+  final ScrollController _contextScrollController = ScrollController();
+  final GlobalKey _imageMarkerKey = GlobalKey();
+  final GlobalKey _contextViewportKey = GlobalKey();
+  bool _isImageMarkerOutOfView = false;
+  bool _isRestoringImageMarker = false;
+
+  ImageContext? get _currentImageContext {
+    if (_currentIndex < 0 || _currentIndex >= widget.imageContexts.length) {
+      return null;
+    }
+    final context = widget.imageContexts[_currentIndex];
+    return context?.hasContent ?? false ? context : null;
+  }
 
   // 缓存控制器和焦点节点，避免每次 build 都创建新实例
   late final FlyoutController _flyoutController;
@@ -42,13 +59,17 @@ class _ImageGalleryWidgetState extends State<ImageGalleryWidget> {
     _pageController = ExtendedPageController(initialPage: _currentIndex);
     _flyoutController = FlyoutController();
     _focusNode = FocusNode();
+    _contextScrollController.addListener(_updateImageMarkerVisibility);
     // 预加载当前图片和前后一张图片
     _preloadImages(_currentIndex);
+    _scrollContextToImageMarker();
   }
 
   @override
   void dispose() {
     _pageController.dispose();
+    _contextScrollController.removeListener(_updateImageMarkerVisibility);
+    _contextScrollController.dispose();
     _focusNode.dispose();
     super.dispose();
   }
@@ -104,12 +125,90 @@ class _ImageGalleryWidgetState extends State<ImageGalleryWidget> {
   void _onPageChanged(int index) {
     setState(() {
       _currentIndex = index;
+      _isImageMarkerOutOfView = false;
+      _isRestoringImageMarker = true;
     });
     // 当页面改变时，预加载新的前后图片
     _preloadImages(index);
+    _scrollContextToImageMarker();
 
     // 通知外部索引变化
     widget.onIndexChanged?.call(index);
+  }
+
+  void _scrollContextToImageMarker() {
+    if (mounted) {
+      setState(() {
+        _isRestoringImageMarker = true;
+        _isImageMarkerOutOfView = false;
+      });
+    }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      final markerContext = _imageMarkerKey.currentContext;
+      if (!mounted || markerContext == null) {
+        _finishImageMarkerRestoration();
+        return;
+      }
+      Scrollable.ensureVisible(
+        markerContext,
+        duration: const Duration(milliseconds: 180),
+        alignment: 0.35,
+        curve: Curves.easeOut,
+      ).whenComplete(_finishImageMarkerRestoration);
+    });
+  }
+
+  void _finishImageMarkerRestoration() {
+    if (!mounted) return;
+    _isRestoringImageMarker = false;
+    _updateImageMarkerVisibility();
+  }
+
+  void _updateImageMarkerVisibility() {
+    if (!mounted || _isRestoringImageMarker) return;
+    final marker = _imageMarkerKey.currentContext?.findRenderObject();
+    final viewport = _contextViewportKey.currentContext?.findRenderObject();
+    if (marker is! RenderBox || viewport is! RenderBox) {
+      if (_isImageMarkerOutOfView) {
+        setState(() => _isImageMarkerOutOfView = false);
+      }
+      return;
+    }
+
+    final markerTop = marker.localToGlobal(Offset.zero).dy;
+    final markerBottom = markerTop + marker.size.height;
+    final viewportTop = viewport.localToGlobal(Offset.zero).dy;
+    final viewportBottom = viewportTop + viewport.size.height;
+    final isOutOfView = !ScrollVisibility.isFullyVisible(
+      itemTop: markerTop,
+      itemBottom: markerBottom,
+      viewportTop: viewportTop,
+      viewportBottom: viewportBottom,
+    );
+    if (_isImageMarkerOutOfView != isOutOfView) {
+      setState(() => _isImageMarkerOutOfView = isOutOfView);
+    }
+  }
+
+  KeyEventResult _handleGalleryKeyEvent(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    if (event.logicalKey == LogicalKeyboardKey.escape) {
+      widget.onEscape?.call();
+      return KeyEventResult.handled;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.enter) {
+      _openInSystemViewer();
+      return KeyEventResult.handled;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
+      _previousImage();
+      return KeyEventResult.handled;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
+      _nextImage();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
   }
 
   void _previousImage() {
@@ -291,6 +390,125 @@ class _ImageGalleryWidgetState extends State<ImageGalleryWidget> {
     ];
   }
 
+  Widget _buildImageContextPanel(ImageContext imageContext) {
+    return Container(
+      width: 300,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: FluentTheme.of(context).micaBackgroundColor,
+        border: Border(
+          left: BorderSide(color: Colors.grey.withValues(alpha: 0.3)),
+        ),
+      ),
+      child: Stack(
+        fit: StackFit.expand,
+        children: [
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  const Icon(FluentIcons.info, size: 16),
+                  const SizedBox(width: 8),
+                  Text(
+                    '图片上下文',
+                    style: FluentTheme.of(context).typography.subtitle,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Text(
+                '第 ${imageContext.chapterOrder} 节 · ${imageContext.chapterTitle}',
+                style: FluentTheme.of(context).typography.caption,
+              ),
+              const SizedBox(height: 12),
+              Expanded(
+                child: SingleChildScrollView(
+                  key: _contextViewportKey,
+                  controller: _contextScrollController,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      if (imageContext.textBeforeImage.isNotEmpty)
+                        SelectableText(
+                          imageContext.textBeforeImage,
+                          style: FluentTheme.of(context).typography.body,
+                        ),
+                      if (imageContext.textBeforeImage.isNotEmpty)
+                        const SizedBox(height: 16),
+                      Container(
+                        key: _imageMarkerKey,
+                        width: double.infinity,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 8,
+                        ),
+                        decoration: BoxDecoration(
+                          color: FluentTheme.of(
+                            context,
+                          ).accentColor.withValues(alpha: 0.12),
+                          borderRadius: BorderRadius.circular(4),
+                          border: Border.all(
+                            color: FluentTheme.of(
+                              context,
+                            ).accentColor.withValues(alpha: 0.45),
+                          ),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              FluentIcons.photo2,
+                              size: 14,
+                              color: FluentTheme.of(context).accentColor,
+                            ),
+                            const SizedBox(width: 8),
+                            const Text('图片原文位置'),
+                          ],
+                        ),
+                      ),
+                      if (imageContext.textAfterImage.isNotEmpty)
+                        const SizedBox(height: 16),
+                      if (imageContext.textAfterImage.isNotEmpty)
+                        SelectableText(
+                          imageContext.textAfterImage,
+                          style: FluentTheme.of(context).typography.body,
+                        ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (_isImageMarkerOutOfView)
+            Positioned(
+              right: 12,
+              bottom: 12,
+              child: Tooltip(
+                message: '回到图片原文位置',
+                child: Container(
+                  decoration: BoxDecoration(
+                    color: FluentTheme.of(context).accentColor,
+                    shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.black.withValues(alpha: 0.2),
+                        blurRadius: 8,
+                        offset: const Offset(0, 2),
+                      ),
+                    ],
+                  ),
+                  child: IconButton(
+                    icon: const Icon(FluentIcons.photo2, color: Colors.white),
+                    onPressed: _scrollContextToImageMarker,
+                  ),
+                ),
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Container(
@@ -299,87 +517,79 @@ class _ImageGalleryWidgetState extends State<ImageGalleryWidget> {
         borderRadius: BorderRadius.circular(8),
         border: Border.all(color: Colors.grey.withValues(alpha: 0.3)),
       ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(8),
-        child: Focus(
-          focusNode: _focusNode,
-          autofocus: true,
-          onKeyEvent: (node, event) {
-            if (event is KeyDownEvent) {
-              if (event.logicalKey == LogicalKeyboardKey.escape) {
-                widget.onEscape?.call();
-                return KeyEventResult.handled;
-              } else if (event.logicalKey == LogicalKeyboardKey.enter) {
-                _openInSystemViewer();
-                return KeyEventResult.handled;
-              } else if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-                _previousImage();
-                return KeyEventResult.handled;
-              } else if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
-                _nextImage();
-                return KeyEventResult.handled;
-              }
-            }
-            return KeyEventResult.ignored;
-          },
-          child: FlyoutTarget(
-            controller: _flyoutController,
-            child: Listener(
-              onPointerSignal: (pointerSignal) {
-                if (pointerSignal is PointerScrollEvent) {
-                  // 直接检测 Ctrl 键状态，避免状态管理
-                  final isCtrlPressed =
-                      HardwareKeyboard.instance.isControlPressed;
+      child: Focus(
+        focusNode: _focusNode,
+        autofocus: true,
+        descendantsAreFocusable: false,
+        onKeyEvent: _handleGalleryKeyEvent,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(8),
+          child: Row(
+            children: [
+              Expanded(
+                child: FlyoutTarget(
+                  controller: _flyoutController,
+                  child: Listener(
+                    onPointerSignal: (pointerSignal) {
+                      if (pointerSignal is PointerScrollEvent) {
+                        // 直接检测 Ctrl 键状态，避免状态管理
+                        final isCtrlPressed =
+                            HardwareKeyboard.instance.isControlPressed;
 
-                  // 如果按住了 Ctrl 键，让 ExtendedImage 处理缩放
-                  if (isCtrlPressed) {
-                    // 不处理滚轮事件，让 ExtendedImage 的缩放功能接管
-                    return;
-                  }
+                        // 如果按住了 Ctrl 键，让 ExtendedImage 处理缩放
+                        if (isCtrlPressed) {
+                          // 不处理滚轮事件，让 ExtendedImage 的缩放功能接管
+                          return;
+                        }
 
-                  // 只处理垂直滚动，忽略水平滚动
-                  final verticalDelta = pointerSignal.scrollDelta.dy;
-                  if (verticalDelta.abs() > 10) {
-                    // 添加阈值避免误触
-                    if (verticalDelta > 0) {
-                      _nextImage();
-                    } else {
-                      _previousImage();
-                    }
-                  }
-                }
-              },
-              child: GestureDetector(
-                onSecondaryTapDown: (details) {
-                  // 显示 Fluent UI 右键菜单
-                  Offset position = details.localPosition;
-                  position = Offset(position.dx + 20, position.dy + 70);
-
-                  _flyoutController.showFlyout(
-                    position: position,
-                    builder: (context) {
-                      return MenuFlyout(items: _buildContextMenuItems());
+                        // 只处理垂直滚动，忽略水平滚动
+                        final verticalDelta = pointerSignal.scrollDelta.dy;
+                        if (verticalDelta.abs() > 10) {
+                          // 添加阈值避免误触
+                          if (verticalDelta > 0) {
+                            _nextImage();
+                          } else {
+                            _previousImage();
+                          }
+                        }
+                      }
                     },
-                  );
-                },
-                child: ExtendedImageGesturePageView.builder(
-                  controller: _pageController,
-                  itemCount: widget.images.length,
-                  onPageChanged: _onPageChanged,
-                  scrollDirection: Axis.horizontal,
-                  physics: const BouncingScrollPhysics(),
-                  itemBuilder: (BuildContext context, int index) {
-                    return ExtendedImage.memory(
-                      widget.images[index],
-                      fit: BoxFit.contain,
-                      mode: ExtendedImageMode.gesture,
-                      initGestureConfigHandler: _buildGestureConfig,
-                      loadStateChanged: _buildLoadStateWidget,
-                    );
-                  },
+                    child: GestureDetector(
+                      onSecondaryTapDown: (details) {
+                        // 显示 Fluent UI 右键菜单
+                        Offset position = details.localPosition;
+                        position = Offset(position.dx + 20, position.dy + 70);
+
+                        _flyoutController.showFlyout(
+                          position: position,
+                          builder: (context) {
+                            return MenuFlyout(items: _buildContextMenuItems());
+                          },
+                        );
+                      },
+                      child: ExtendedImageGesturePageView.builder(
+                        controller: _pageController,
+                        itemCount: widget.images.length,
+                        onPageChanged: _onPageChanged,
+                        scrollDirection: Axis.horizontal,
+                        physics: const BouncingScrollPhysics(),
+                        itemBuilder: (BuildContext context, int index) {
+                          return ExtendedImage.memory(
+                            widget.images[index],
+                            fit: BoxFit.contain,
+                            mode: ExtendedImageMode.gesture,
+                            initGestureConfigHandler: _buildGestureConfig,
+                            loadStateChanged: _buildLoadStateWidget,
+                          );
+                        },
+                      ),
+                    ),
+                  ),
                 ),
               ),
-            ),
+              if (_currentImageContext != null)
+                _buildImageContextPanel(_currentImageContext!),
+            ],
           ),
         ),
       ),

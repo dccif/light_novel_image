@@ -16,6 +16,9 @@
 - Apple Silicon processor (M1/M2/M3 series)
 
 ## Features
+- Image context reading with the image's original EPUB position marked
+- Floating return button when the image position leaves the visible text area
+- Left and right arrow navigation in both image and text panels
 - EPUB image browsing support
 - Drag and drop operations
 - Image zoom and view
@@ -37,4 +40,4 @@
 - This version is optimized for Macs with Apple Silicon processors
 
 ## Support & Feedback
-If you encounter any issues or have suggestions, please submit an Issue on the GitHub project page. 
+If you encounter any issues or have suggestions, please submit an Issue on the GitHub project page.

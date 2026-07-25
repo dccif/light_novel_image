@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 import 'package:window_manager/window_manager.dart';
 import 'package:light_novel_image/models/book_info.dart';
+import 'package:light_novel_image/models/image_context.dart';
 import 'package:light_novel_image/models/image_resolution.dart';
 import 'package:light_novel_image/services/epub_parser_service.dart';
 import 'package:light_novel_image/services/image_resolution_service.dart';
@@ -25,6 +26,7 @@ class _EpubViewerPageState extends State<EpubViewerPage> {
   List<String> _imageNames = [];
   List<BookInfo> _books = [];
   List<int> _imageBookIndexes = [];
+  List<ImageContext?> _imageContexts = [];
   List<ImageResolution> _imageResolutions = [];
   ResolutionStatistics? _resolutionStatistics;
   bool _isLoading = true;
@@ -39,6 +41,7 @@ class _EpubViewerPageState extends State<EpubViewerPage> {
   List<Uint8List> _sortedImages = [];
   List<String> _sortedImageNames = [];
   List<int> _sortedImageBookIndexes = [];
+  List<ImageContext?> _sortedImageContexts = [];
   List<int> _sortedIndices = []; // 原始索引到排序索引的映射
 
   // 保存GridView的滚动位置
@@ -131,6 +134,7 @@ class _EpubViewerPageState extends State<EpubViewerPage> {
       _sortedImages = List.from(_images);
       _sortedImageNames = List.from(_imageNames);
       _sortedImageBookIndexes = List.from(_imageBookIndexes);
+      _sortedImageContexts = List.from(_imageContexts);
       _sortedIndices = List.generate(_images.length, (index) => index);
       return;
     }
@@ -152,6 +156,9 @@ class _EpubViewerPageState extends State<EpubViewerPage> {
         .toList();
     _sortedImageBookIndexes = _sortedIndices
         .map((index) => _imageBookIndexes[index])
+        .toList();
+    _sortedImageContexts = _sortedIndices
+        .map((index) => _imageContexts[index])
         .toList();
   }
 
@@ -339,6 +346,7 @@ class _EpubViewerPageState extends State<EpubViewerPage> {
           _images = result.allImages;
           _imageNames = result.allImageNames;
           _imageBookIndexes = result.imageBookIndexes;
+          _imageContexts = result.imageContexts;
           _currentBookIndex = _imageBookIndexes.isNotEmpty
               ? _imageBookIndexes[0]
               : 0;
@@ -627,6 +635,9 @@ class _EpubViewerPageState extends State<EpubViewerPage> {
             imageNames: _sortedImageNames.isNotEmpty
                 ? _sortedImageNames
                 : _imageNames,
+            imageContexts: _sortedImageContexts.isNotEmpty
+                ? _sortedImageContexts
+                : _imageContexts,
             initialIndex: _currentIndex,
             bookIdentifier: _currentBookIdentifier,
             onEscape: _onGalleryEscape,
