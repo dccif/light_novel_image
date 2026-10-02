@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const os = require('node:os');
 const path = require('node:path');
-const {targets, resolveVersion, render, peArchitecture, elfArchitecture, sha256, collectPackages, verifyWindows} = require('./release.cjs');
+const {targets, resolveVersion, render, peArchitecture, elfArchitecture, sha256, collectPackages, verifyWindows, verifyMacOS} = require('./release.cjs');
 
 test('version overrides retain the build number and CRLF', () => {
   const result = resolveVersion('name: app\r\nversion: 1.0.8+3\r\n', '1.0.9');
@@ -74,6 +74,54 @@ test('ELF AOT snapshots must match the Windows package architecture', t => {
   header.writeUInt16LE(62, 18);
   fs.writeFileSync(path.join(directory, 'app.so'), header);
   assert.doesNotThrow(() => verifyWindows(directory, 'x64'));
+});
+
+function macOSFixture(t) {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'release-macos-test-'));
+  t.after(() => fs.rmSync(directory, {recursive: true, force: true}));
+  const app = path.join(directory, 'Application with spaces.app');
+  const binaries = [
+    'Contents/MacOS/light_novel_image',
+    'Contents/Frameworks/App.framework/Versions/A/App',
+    'Contents/Frameworks/FlutterMacOS.framework/Versions/A/FlutterMacOS',
+  ].map(file => path.join(app, file));
+  const header = Buffer.alloc(32);
+  header.writeUInt32BE(0xcafebabe, 0);
+  for (const file of binaries) {
+    fs.mkdirSync(path.dirname(file), {recursive: true});
+    fs.writeFileSync(file, header);
+  }
+  return {app, binaries};
+}
+
+test('macOS lipo puts the file before -verify_arch, including paths with spaces', t => {
+  const {app, binaries} = macOSFixture(t);
+  const checked = [];
+  let signatureChecked = false;
+  verifyMacOS(app, (command, args) => {
+    if (command === 'lipo') {
+      assert.ok(binaries.includes(args[0]));
+      assert.deepEqual(args.slice(1), ['-verify_arch', 'x86_64', 'arm64']);
+      checked.push(args[0]);
+    } else {
+      assert.equal(command, 'codesign');
+      assert.deepEqual(args, ['--verify', '--deep', '--strict', app]);
+      signatureChecked = true;
+    }
+  });
+  assert.deepEqual(checked.sort(), [...binaries].sort());
+  assert.ok(signatureChecked);
+});
+
+test('macOS still rejects a framework missing a required architecture', t => {
+  const {app} = macOSFixture(t);
+  const missing = new Error('App.framework is missing arm64');
+  let signatureChecked = false;
+  assert.throws(() => verifyMacOS(app, (command) => {
+    if (command === 'lipo') throw missing;
+    signatureChecked = true;
+  }), error => error === missing);
+  assert.equal(signatureChecked, false);
 });
 
 test('both languages render all release and installation templates', () => {

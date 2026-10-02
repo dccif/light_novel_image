@@ -102,7 +102,7 @@ function verifyWindows(directory, arch) {
   }
 }
 
-function verifyMacOS(app) {
+function verifyMacOS(app, run = execFileSync) {
   if (!fs.existsSync(path.join(app, 'Contents/MacOS/light_novel_image'))) {
     throw new Error('Missing macOS executable.');
   }
@@ -116,12 +116,14 @@ function verifyMacOS(app) {
     try { size = fs.readSync(fd, header, 0, 4, 0); }
     finally { fs.closeSync(fd); }
     if (size === 4 && machOMagic.has(header.readUInt32BE(0))) {
-      execFileSync('lipo', ['-verify_arch', 'x86_64', 'arm64', file], {stdio: 'inherit'});
+      // -verify_arch consumes all following arguments as architecture names.
+      // Put the input file first so lipo cannot mistake its path for an arch.
+      run('lipo', [file, '-verify_arch', 'x86_64', 'arm64'], {stdio: 'inherit'});
       count++;
     }
   }
   if (count < 3) throw new Error('Application and Flutter frameworks were not found.');
-  execFileSync('codesign', ['--verify', '--deep', '--strict', app], {stdio: 'inherit'});
+  run('codesign', ['--verify', '--deep', '--strict', app], {stdio: 'inherit'});
 }
 
 async function sha256(file) {
