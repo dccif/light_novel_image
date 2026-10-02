@@ -1,88 +1,56 @@
-# GitHub Actions 工作流说明
+# GitHub Actions 构建说明
 
-本项目包含以下自动化构建工作流：
+所有工作流均由 Actions 页面手动触发，不会在普通 push、创建 tag 或 Release 时自动运行。macOS 需要 12.0+，Windows 不支持 32 位 x86。
 
-## 🔄 工作流类型
+## 发布三个安装包
 
-### 1. `flutter.yml` - 代码分析与测试
-- **触发条件**: 手动触发
-- **功能**: 获取依赖、运行静态分析和测试
+进入 Actions → Release Build → Run workflow，输入版本号（如 `1.0.8`），选择说明语言以及是否创建草稿。
 
-### 2. `release.yml` - 正式发布构建  
-- **触发条件**: 创建GitHub Release 或 手动触发
-- **功能**: 构建发布版本，包含详细的安装说明和文件校验
-- **产物保留**: 90天
-- **特色**: 包含SHA256校验、自动生成README.txt
+| 安装包 | 运行器 | 适用处理器 |
+| --- | --- | --- |
+| `light_novel_image-v1.0.8-windows-x64.zip` | `windows-2025` | Intel / AMD x64 |
+| `light_novel_image-v1.0.8-windows-arm64.zip` | `windows-11-arm` | Windows ARM64 |
+| `light_novel_image-v1.0.8-macos-universal.zip` | `macos-26-intel` | Intel / Apple Silicon |
 
-### 3. `manual-build.yml` - 手动构建
-- **触发条件**: 仅手动触发
-- **功能**: 快速构建测试版本（支持Debug/Release）
-- **产物保留**: 7天
-- **用途**: 开发测试使用
+Windows 必须在 Windows 上构建，macOS 必须在 macOS 上构建；Flutter 的跨平台 UI 不代表能从 Linux 交叉编译所有桌面平台。Linux 只负责版本准备、静态分析、测试和汇总发布。
 
-## 🚀 使用方法
+- `update_pubspec` 开启时，准备任务只提交一次版本修改，保留 `+3` 等构建号；仓库需允许 Actions 写入，受保护分支可能拒绝提交。关闭后仍通过构建参数设置发布版本，但不会修改源码版本。
+- 三个构建检出相同的提交 SHA，新建的发布 tag 也指向该 SHA。已存在的 tag 不会被强制移动，发布新代码请使用新的版本号。输入版本仅接受 `数字.数字.数字`。
+- Windows 会校验 EXE / DLL 的 PE 架构及 Dart AOT 快照的 ELF 架构；macOS 会校验主程序、Flutter 框架及所有 Mach-O 插件均包含 x86_64 和 arm64，并检查临时签名。
+- ZIP 内包含安装说明。发布前再次计算 SHA256，必须三个包齐全且校验匹配，随后上传 ZIP 与 `SHA256SUMS.txt`。
+- 发布构建的 Actions 中间产物保留 90 天；Release 资产不受这个保留期影响。草稿需确认后手动发布。
 
-### 自动构建
-1. 推送代码到main分支 → 自动触发CI构建
-2. 创建发布版本时，使用 `Release Build` 并输入版本号（例如 `1.0.8`）
+## 加速构建
 
-### 手动发布
-1. 进入GitHub仓库 → Actions标签页
-2. 选择"Release Build"工作流
-3. 点击"Run workflow"
-4. 输入版本号（如：1.0.8）
-5. 点击"Run workflow"开始构建
+- 共用 [setup-flutter](../actions/setup-flutter/action.yml) 配置，Flutter 固定为 `3.47.6`，升级时只需修改这一处，并同步 `pubspec.yaml` 和项目 README。
+- 使用 `subosito/flutter-action@v2` 缓存 Flutter SDK 和 pub 依赖；使用 `actions/cache@v5` 缓存 CocoaPods 和 `.dart_tool/flutter_build`。缓存按系统、运行器架构、Flutter 版本、依赖、原生配置和构建参数隔离，源码变更时仍执行真实构建。
+- macOS 从原来的两套架构任务、预编译、archive / export，改为一次 `flutter build macos --release --no-pub` 生成通用应用。Windows 两个原生架构并行构建。
+- ZIP 使用快速压缩，`upload-artifact@v6` 设置 `compression-level: 0`，不对已压缩文件重复压缩；汇总下载使用 `download-artifact@v8`，发布使用 `softprops/action-gh-release@v3`。
+- 不缓存整个原生 build 目录，也不跳过 Flutter 构建；避免大缓存上传成本和旧产物误发布。没有给 MSBuild 添加不生效的 CMake compiler launcher。
 
-### 快速测试构建
-1. 进入GitHub仓库 → Actions标签页  
-2. 选择"Manual Build"工作流
-3. 选择构建类型（Release/Debug）
-4. 点击"Run workflow"
+首次运行、依赖升级或缓存失效仍需要下载与完整编译；GitHub 运行器排队不属于编译耗时，固定 Intel macOS 标签并不能保证没有排队。通用包需要编译两种 macOS 架构，但只启动一台 macOS 运行器。
 
-## 📦 构建产物
+### Windows ARM64 SDK
 
-### 文件结构
-```
-light_novel_image-v1.0.8-windows-x64.zip
-├── light_novel_image.exe          # 主程序
-├── flutter_windows.dll            # Flutter运行时
-├── data/                          # 应用数据
-│   ├── icudtl.dat
-│   └── flutter_assets/
-├── README.txt                     # 安装说明
-└── 其他依赖文件...
+Flutter 3.47.6 的官方 Windows 发布清单只有 x64 SDK 包。共用 Action 先安装这个包，再在 ARM64 运行器上调用 Flutter 自带的更新逻辑获取与引擎匹配的 ARM64 Dart SDK。SDK 缓存按真实运行器架构隔离，避免污染 x64 缓存；若 Dart 没有切换到 `windows_arm64`，任务直接失败，不会将 x64 产物标成 ARM64。
+
+## 测试或临时构建
+
+- Flutter Analysis and Tests：在 `ubuntu-24.04` 上按选项运行 `flutter analyze --no-pub` 和 `flutter test --no-pub`，并验证发布工具。
+- Manual Build：选择 Windows x64 / ARM64 和 Debug / Release；复用同一套环境配置及架构校验，产物保留 7 天，不创建 Release。
+
+发布工具本地验证：
+
+```powershell
+mise exec -- node --test .github/scripts/release.test.cjs
 ```
 
-### 下载方式
-- **Artifacts**: 在Actions页面下载（需要登录GitHub）
-- **Releases**: 在Releases页面下载（公开访问）
+## 常见问题
 
-## 🔧 配置说明
+- `SHA256 mismatch` / 缺少安装包：查看对应构建任务，不要绕过汇总校验。
+- ARM64 插件校验失败：依赖的原生 DLL 不是 ARM64，需要更新或更换插件，而不是修改文件名。
+- macOS 架构缺失：检查插件支持和 `EXCLUDED_ARCHS`，不要发布单架构应用作为通用包。
+- 缓存异常：在 Actions → Caches 删除对应平台缓存后重跑；若修改缓存结构，将共用 Action 的 `v1` 提升到新版本。
+- macOS 首次启动被阻止：应用只有临时签名，未签署 Developer ID、未公证；通过系统隐私与安全性设置允许打开，正式签名需另行配置证书。
 
-### Flutter版本
-- 当前使用: `3.47.6`（Dart `3.13.5`）
-- 渠道: `stable`
-- 支持缓存以加速构建
-- 本地通过 mise 管理 Flutter；升级后请同步更新三个工作流的 `flutter-version`、`pubspec.yaml` 的 SDK 约束与项目 README。
-
-### 构建环境
-- 运行器: `windows-latest`
-- 启用Windows桌面支持
-- 自动安装依赖
-
-## 📝 自定义配置
-
-如需修改构建配置，可以编辑相应的`.yml`文件：
-
-- 修改Flutter版本: 更改`flutter-version`字段
-- 调整保留天数: 修改`retention-days`值
-- 添加构建步骤: 在`steps`中添加新的步骤
-
-## 🔒 权限要求
-
-工作流需要以下权限：
-- `contents: read` - 读取仓库内容
-- `actions: read` - 读取Actions
-- `packages: write` - 写入包（如果需要）
-
-GitHub Actions会自动提供`GITHUB_TOKEN`用于发布。
+参考：[GitHub 运行器](https://docs.github.com/en/actions/reference/runners/github-hosted-runners)、[Flutter 支持平台](https://docs.flutter.dev/reference/supported-platforms)。

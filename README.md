@@ -36,10 +36,10 @@
 如果您只想使用应用而不进行开发，可以直接下载预构建的版本：
 
 1. **前往 [Releases 页面](https://github.com/dccif/light_novel_image/releases/latest)**
-2. **下载最新的 `light_novel_image-v*-windows-x64.zip`**
-3. **解压并运行 `light_novel_image.exe`**
+2. **根据处理器选择 Windows x64 / ARM64 包，或 macOS 通用包（Intel 与 Apple Silicon 共用）**
+3. **Windows 完整解压后运行 `light_novel_image.exe`；macOS 解压后将 `.app` 放入「应用程序」**
 
-> 💡 预构建版本会在每次代码更新后自动构建，无需安装Flutter开发环境。
+> 💡 发布包由维护者手动触发 GitHub Actions 构建；使用时无需安装 Flutter。Windows 不支持 32 位 x86，macOS 需要 12.0 或更高版本。
 
 ### 🛠️ 开发环境搭建
 
@@ -47,7 +47,7 @@
 
 - Flutter SDK 3.47.6 或更高版本
 - Dart SDK 3.13.5 或更高版本
-- 理论上支持的操作系统：Windows 10+、macOS 10.15+、Linux (Ubuntu 18.04+)
+- 桌面平台：Windows 10+（x64 / ARM64）、macOS 12.0+（Intel / Apple Silicon）；Linux 可在对应系统自行构建
 
 ### 安装步骤
 
@@ -75,12 +75,15 @@
 # Windows
 flutter build windows
 
-# macOS
-flutter build macos
+# macOS（在 macOS 上构建通用包）
+flutter config --no-enable-macos-arm64-only
+flutter build macos --release
 
 # Linux
 flutter build linux
 ```
+
+CI 产出 Windows x64、Windows ARM64 和 macOS Universal 三个包，复用 Flutter / pub / CocoaPods / Dart 构建缓存，每个目标只编译一次。配置与排错见 [构建工作流说明](.github/workflows/README.md)。
 
 ## 📖 使用说明
 

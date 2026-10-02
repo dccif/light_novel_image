@@ -14,4 +14,4 @@ PRODUCT_BUNDLE_IDENTIFIER = com.example.lightNovelImage
 PRODUCT_COPYRIGHT = Copyright © 2025 com.example. All rights reserved.
 
 // Minimum deployment target version
-MACOSX_DEPLOYMENT_TARGET = 10.15
+MACOSX_DEPLOYMENT_TARGET = 12.0

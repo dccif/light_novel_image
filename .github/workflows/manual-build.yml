@@ -4,56 +4,49 @@ on:
   workflow_dispatch:
     inputs:
       build_type:
-        description: '构建类型'
-        required: true
-        default: 'release'
+        description: 构建类型
+        default: release
         type: choice
-        options:
-        - release
-        - debug
+        options: [release, debug]
+      arch:
+        description: Windows 架构
+        default: x64
+        type: choice
+        options: [x64, arm64]
+
+permissions:
+  contents: read
 
 jobs:
   build:
-    runs-on: windows-latest
-    
+    runs-on: ${{ inputs.arch == 'arm64' && 'windows-11-arm' || 'windows-2025' }}
+    timeout-minutes: 45
+    env:
+      BUILD_TYPE: ${{ inputs.build_type }}
+      PACKAGE_ARCH: ${{ inputs.arch }}
     steps:
-    - name: 检出代码
-      uses: actions/checkout@v6
-      
-    - name: 设置Flutter环境
-      uses: subosito/flutter-action@v2
-      with:
-        flutter-version: '3.47.6'
-        channel: 'stable'
-        cache: true
-        
-    - name: 启用Windows桌面支持
-      run: flutter config --enable-windows-desktop
-      
-    - name: 获取依赖
-      run: flutter pub get
-      
-    - name: 构建应用
-      run: flutter build windows --${{ github.event.inputs.build_type }}
-      
-    - name: 创建发布包
-      run: |
-        $buildType = "${{ github.event.inputs.build_type }}"
-        $folderName = if ($buildType -eq "release") { "Release" } else { "Debug" }
-        $timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
-        $zipName = "light_novel_image-$buildType-$timestamp.zip"
-        
-        mkdir build-output
-        Copy-Item -Recurse "build\windows\x64\runner\$folderName\*" "build-output\"
-        Compress-Archive -Path "build-output\*" -DestinationPath $zipName
-        
-        echo "ZIP_NAME=$zipName" >> $env:GITHUB_OUTPUT
-      id: package
-      shell: powershell
-      
-    - name: 上传构建产物
-      uses: actions/upload-artifact@v6
-      with:
-        name: light_novel_image-${{ github.event.inputs.build_type }}-${{ github.run_number }}
-        path: ${{ steps.package.outputs.ZIP_NAME }}
-        retention-days: 7
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: ./.github/actions/setup-flutter
+        with:
+          platform: windows
+          cache-variant: manual-${{ inputs.build_type }}
+      - name: 构建应用
+        shell: bash
+        run: flutter build windows --"$BUILD_TYPE" --no-pub
+      - name: 校验架构并创建测试包
+        id: package
+        uses: actions/github-script@v8
+        with:
+          script: |
+            await require('./.github/scripts/release.cjs').packageApp({core, context, manual: true});
+      - uses: actions/upload-artifact@v6
+        with:
+          name: ${{ steps.package.outputs.name }}
+          path: |
+            dist/*.zip
+            dist/*.sha256
+          if-no-files-found: error
+          compression-level: 0
+          retention-days: 7

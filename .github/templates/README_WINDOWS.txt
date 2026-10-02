@@ -1,4 +1,4 @@
-# 轻小说图片浏览器 v{{VERSION}}
+# 轻小说图片浏览器 v{{VERSION}}（Windows {{ARCH}}）
 
 ## 安装说明
 1. 解压所有文件到任意目录
@@ -6,8 +6,8 @@
 3. 将EPUB文件拖拽到程序窗口或点击选择文件
 
 ## 系统要求
-- Windows 10 或更高版本
-- Visual C++ Redistributable (通常系统已包含)
+- Windows 10 或更高版本，{{ARCH}} 处理器
+- 对应 {{ARCH}} 架构的 Visual C++ Redistributable（通常系统已包含）
 
 ## 功能特性
 - 图片上下文阅读：查看图片时可阅读对应 EPUB 正文，并标记图片原文位置

@@ -123,6 +123,8 @@ class _ImageContextPanelState extends State<ImageContextPanel> {
           const SizedBox(height: 12),
           Expanded(
             child: Stack(
+              // 隐藏按钮返回 SizedBox.shrink 时，不能让 Stack 的宽度跟着归零。
+              fit: StackFit.expand,
               children: [
                 Positioned.fill(
                   child: SelectionArea(

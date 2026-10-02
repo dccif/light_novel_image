@@ -1,66 +1,29 @@
 ## 下载
 
-### Windows
-- **Windows x64**: [{{WINDOWS_ZIP}}]({{WINDOWS_ZIP}})
+- **Windows x64（Intel / AMD）**：[{{WINDOWS_X64_ZIP}}]({{WINDOWS_X64_URL}})
+- **Windows ARM64（如 Snapdragon）**：[{{WINDOWS_ARM64_ZIP}}]({{WINDOWS_ARM64_URL}})
+- **macOS 通用版（Intel / Apple Silicon）**：[{{MACOS_UNIVERSAL_ZIP}}]({{MACOS_UNIVERSAL_URL}})
 
-### macOS
-- **Apple Silicon (M1/M2/M3)**: [{{MACOS_ARM64_ZIP}}]({{MACOS_ARM64_ZIP}})
-- **Intel**: [{{MACOS_X64_ZIP}}]({{MACOS_X64_ZIP}})
+## 安装与系统要求
 
-## 文件校验
-
-### Windows
-- **Windows x64 SHA256**: `{{WINDOWS_SHA256}}`
-
-### macOS
-- **Apple Silicon SHA256**: `{{MACOS_ARM64_SHA256}}`
-- **Intel SHA256**: `{{MACOS_X64_SHA256}}`
-
-## 安装说明
-
-### Windows
-1. 下载 Windows x64 zip文件
-2. 解压到任意目录
-3. 运行 `light_novel_image.exe`
-
-### macOS
-1. 下载对应处理器架构的版本：
-   - Apple Silicon Mac (M1/M2/M3) 选择 ARM64 版本
-   - Intel Mac 选择 Intel 版本
-2. 解压并将 `light_novel_image.app` 拖拽到「应用程序」文件夹
-3. 首次运行时可能需要在「系统偏好设置」>「安全性与隐私」中允许应用运行
-
-## 功能特性
-- 图片上下文阅读与图片原文位置标记
-- 原文位置离开可视范围时的悬浮返回按钮
-- 在图片和原文面板中均可使用左右方向键切换图片
-- 支持EPUB文件图片浏览
-- 拖拽操作支持
-- 图片缩放和查看
-- 多文件批量处理
-- 跨平台支持（Windows、macOS）
-- 针对不同处理器架构优化
-
-## 使用方法
-1. 启动程序后，点击"选择EPUB文件"按钮或直接拖拽EPUB文件到窗口
-2. 程序会自动解析EPUB文件中的图片
-3. 使用鼠标滚轮或按钮进行图片缩放
-4. 使用方向键或按钮切换图片
-
-## 系统要求
-- **Windows**: Windows 10 或更高版本，Visual C++ Redistributable
-- **macOS ARM64**: macOS 11.0 或更高版本，Apple Silicon处理器
-- **macOS Intel**: macOS 10.15 或更高版本，Intel 64位处理器
+- Windows 10+：选择与处理器匹配的包，完整解压后运行 `light_novel_image.exe`；需要对应架构的 Visual C++ Redistributable。
+- macOS 12+：两种处理器使用同一个通用包，解压后将 `.app` 拖入「应用程序」。应用未签署 Developer ID、未公证，首次启动可能需要在系统隐私与安全性设置中允许打开。
 
 ## 更新内容
 
 - 优化大书和批量导入，降低内存占用，让图片浏览更流畅。
-- 优化图片上下文阅读，可上下滚动阅读全文，并一键返回图片原文位置。
-- 修复连续切图时悬浮按钮闪烁，改善左右方向键的响应。
-- 升级 Flutter 和相关依赖，改善稳定性与兼容性。
+- 图片上下文支持继续阅读正文，并一键返回图片原文位置。
+- 修复连续切图时悬浮按钮闪烁，改善方向键响应。
+- 新增 Windows ARM64 原生包，macOS 合并为通用包。
 
-完整版本记录：[更新日志](https://github.com/{{REPOSITORY}}/blob/v{{VERSION}}/CHANGELOG.md)。
+完整记录：[更新日志](https://github.com/{{REPOSITORY}}/blob/v{{VERSION}}/CHANGELOG.md)。
 
----
-发布时间: {{BUILD_TIME}}
-项目地址: https://github.com/{{REPOSITORY}}
+## SHA256 校验
+
+- Windows x64：`{{WINDOWS_X64_SHA256}}`
+- Windows ARM64：`{{WINDOWS_ARM64_SHA256}}`
+- macOS 通用版：`{{MACOS_UNIVERSAL_SHA256}}`
+
+也可下载随附的 `SHA256SUMS.txt` 校验文件。
+
+构建时间：{{BUILD_TIME}}

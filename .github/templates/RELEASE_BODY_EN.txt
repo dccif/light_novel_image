@@ -1,60 +1,29 @@
 ## Downloads
 
-### Windows
-- **Windows x64**: [{{WINDOWS_ZIP}}]({{WINDOWS_ZIP}})
+- **Windows x64 (Intel / AMD)**: [{{WINDOWS_X64_ZIP}}]({{WINDOWS_X64_URL}})
+- **Windows ARM64 (e.g. Snapdragon)**: [{{WINDOWS_ARM64_ZIP}}]({{WINDOWS_ARM64_URL}})
+- **macOS Universal (Intel / Apple Silicon)**: [{{MACOS_UNIVERSAL_ZIP}}]({{MACOS_UNIVERSAL_URL}})
 
-### macOS
-- **Apple Silicon (M1/M2/M3)**: [{{MACOS_ARM64_ZIP}}]({{MACOS_ARM64_ZIP}})
-- **Intel**: [{{MACOS_X64_ZIP}}]({{MACOS_X64_ZIP}})
+## Installation and requirements
 
-## File Verification
-
-### Windows
-- **Windows x64 SHA256**: `{{WINDOWS_SHA256}}`
-
-### macOS
-- **Apple Silicon SHA256**: `{{MACOS_ARM64_SHA256}}`
-- **Intel SHA256**: `{{MACOS_X64_SHA256}}`
-
-## Installation Instructions
-
-### Windows
-1. Download the Windows x64 zip file
-2. Extract to any directory
-3. Run `light_novel_image.exe`
-
-### macOS
-1. Download the version for your processor architecture:
-   - Apple Silicon Mac (M1/M2/M3): Choose ARM64 version
-   - Intel Mac: Choose Intel version
-2. Extract and drag `light_novel_image.app` to the Applications folder
-3. On first launch, you may need to allow the app to run in System Preferences > Security & Privacy
-
-## Features
-- Image context reading with the image's original EPUB position marked
-- Floating return button when the image position leaves the visible text area
-- Left and right arrow navigation in both image and text panels
-- EPUB image browsing support
-- Drag and drop operations
-- Image zoom and view
-- Batch file processing
-- Cross-platform support (Windows, macOS)
-- Optimized for different processor architectures
-
-## Usage
-1. After launching, click "Select EPUB File" or drag EPUB files directly to the window
-2. The program will automatically parse images from the EPUB file
-3. Use mouse wheel or buttons to zoom images
-4. Use arrow keys or buttons to switch between images
-
-## System Requirements
-- **Windows**: Windows 10 or later, Visual C++ Redistributable
-- **macOS ARM64**: macOS 11.0 or later, Apple Silicon processor
-- **macOS Intel**: macOS 10.15 or later, Intel 64-bit processor
+- Windows 10+: choose the package matching your processor, extract all files, and run `light_novel_image.exe`. Install the matching Visual C++ Redistributable if needed.
+- macOS 12+: use the same universal package on either processor. Extract and move the `.app` to Applications. The app is not Developer ID signed or notarized; you may need to allow opening it in Privacy & Security settings.
 
 ## Updates
-Please check the commit history for detailed update information.
 
----
-Release Time: {{BUILD_TIME}}
-Repository: https://github.com/{{REPOSITORY}}
+- Smoother large-book browsing and batch imports with lower memory usage.
+- Read beyond the image context and return to the image's original position.
+- Fixed floating-button flicker and improved arrow-key navigation.
+- Added native Windows ARM64 packages and a single universal macOS package.
+
+Full history: [Changelog](https://github.com/{{REPOSITORY}}/blob/v{{VERSION}}/CHANGELOG.md).
+
+## SHA256 verification
+
+- Windows x64: `{{WINDOWS_X64_SHA256}}`
+- Windows ARM64: `{{WINDOWS_ARM64_SHA256}}`
+- macOS Universal: `{{MACOS_UNIVERSAL_SHA256}}`
+
+A `SHA256SUMS.txt` file is also included in the release assets.
+
+Build time: {{BUILD_TIME}}

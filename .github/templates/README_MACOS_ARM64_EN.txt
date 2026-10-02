@@ -12,7 +12,7 @@
 3. On first launch, you may need to allow the app to run in System Preferences > Security & Privacy
 
 ## System Requirements
-- macOS 11.0 or later
+- macOS 12.0 or later
 - Apple Silicon processor (M1/M2/M3 series)
 
 ## Features

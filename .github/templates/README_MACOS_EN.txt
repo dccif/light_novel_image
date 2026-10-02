@@ -1,4 +1,4 @@
-# Light Novel Image Viewer for macOS
+# Light Novel Image Viewer for macOS (Universal: Intel / Apple Silicon)
 
 ## Version Information
 - Version: {{VERSION}}
@@ -11,7 +11,7 @@
 3. On first run, you may need to allow the app in System Preferences > Security & Privacy
 
 ## System Requirements
-- macOS 10.15 or later
+- macOS 12.0 or later
 - 64-bit processor (Intel or Apple Silicon)
 
 ## Features
@@ -32,7 +32,7 @@
 5. Right-click menu supports copying images, opening in system viewer, etc.
 
 ## Important Notes
-- This application is not notarized by Apple, security warnings may appear on first run
+- This application is ad-hoc signed, not Developer ID signed or notarized by Apple, security warnings may appear on first run
 - If unable to open, right-click the app in Finder and select "Open"
 - File system access permissions are required to read EPUB files
 

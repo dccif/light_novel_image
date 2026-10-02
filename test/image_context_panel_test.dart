@@ -31,6 +31,18 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
+    // 文字存在于 widget 树中不代表实际可见，正文视口必须填满面板。
+    const contentWidth = 300 - 16 * 2 - 1.0; // 面板宽度减去内边距和左边框。
+    final viewportSize = tester.getSize(find.byType(CustomScrollView));
+    expect(viewportSize.width, contentWidth);
+    expect(viewportSize.height, greaterThan(0));
+    expect(tester.getSize(find.text('图片原文位置')).width, greaterThan(0));
+    expect(
+      tester
+          .getRect(find.byType(CustomScrollView))
+          .contains(tester.getRect(find.text('图片原文位置')).center),
+      isTrue,
+    );
     expect(find.text('图片原文位置'), findsOneWidget);
     expect(find.textContaining('第 5000 段'), findsOneWidget);
     expect(find.textContaining('第 9999 段'), findsNothing);
@@ -45,10 +57,12 @@ void main() {
     expect(paragraphBefore, lessThan(markerTop));
     scroll.jumpTo(1400);
     await tester.pumpAndSettle();
+    expect(tester.getSize(find.byType(CustomScrollView)).width, contentWidth);
     expect(find.byTooltip('回到图片原文位置'), findsOneWidget);
     await tester.tap(find.byTooltip('回到图片原文位置'));
     await tester.pumpAndSettle();
     expect(scroll.offset, closeTo(0, 0.01));
+    expect(tester.getSize(find.byType(CustomScrollView)).width, contentWidth);
     expect(find.byTooltip('回到图片原文位置'), findsNothing);
     scroll.jumpTo(-1400);
     await tester.pumpAndSettle();

@@ -1,4 +1,4 @@
-# Light Novel Image Viewer v{{VERSION}}
+# Light Novel Image Viewer v{{VERSION}} (Windows {{ARCH}})
 
 ## Installation Instructions
 1. Extract all files to any directory
@@ -6,8 +6,8 @@
 3. Drag EPUB files to the program window or click to select files
 
 ## System Requirements
-- Windows 10 or higher
-- Visual C++ Redistributable (usually included with system)
+- Windows 10 or higher, {{ARCH}} processor
+- Visual C++ Redistributable for {{ARCH}} (usually included with system)
 
 ## Features
 - Image context reading: view the EPUB text around an image with its original position marked

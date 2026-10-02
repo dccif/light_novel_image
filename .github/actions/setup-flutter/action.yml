@@ -1,0 +1,77 @@
+name: Setup Flutter desktop
+description: Shared SDK, dependency and Dart build caches for native desktop builds
+inputs:
+  flutter-version:
+    description: Pinned Flutter SDK version
+    default: '3.47.6'
+  platform:
+    description: Desktop platform (windows, macos), or none for analysis
+    default: none
+  cache-variant:
+    description: Build mode and version used to isolate Dart build outputs
+    default: analysis
+runs:
+  using: composite
+  steps:
+    - uses: subosito/flutter-action@v2
+      with:
+        flutter-version: ${{ inputs.flutter-version }}
+        channel: stable
+        # Windows release bundles currently only include an x64 Dart SDK.
+        architecture: x64
+        cache: true
+        cache-key: flutter-sdk-:os:-:version:-${{ runner.arch }}-native-v1
+        pub-cache-key: flutter-pub-:os:-:version:-${{ runner.arch }}
+    - name: 使用原生 Windows ARM64 Dart SDK
+      if: runner.os == 'Windows' && runner.arch == 'ARM64'
+      shell: pwsh
+      run: |
+        $ErrorActionPreference = 'Stop'
+        if ($env:PROCESSOR_ARCHITECTURE -ne 'ARM64') {
+          throw 'An ARM64 PowerShell process is required for Flutter SDK bootstrap.'
+        }
+        $dartVersion = & dart --version 2>&1 | Out-String
+        if ($LASTEXITCODE -ne 0) { throw 'Unable to inspect Dart SDK.' }
+        if ($dartVersion -notmatch 'windows_arm64') {
+          # Flutter's own updater downloads the engine-matched ARM64 Dart SDK.
+          foreach ($stamp in @('engine-dart-sdk.stamp', 'flutter_tools.snapshot', 'flutter_tools.stamp')) {
+            $stampPath = Join-Path $env:FLUTTER_ROOT "bin/cache/$stamp"
+            if (Test-Path -LiteralPath $stampPath) { Remove-Item -LiteralPath $stampPath }
+          }
+          & flutter --version
+          if ($LASTEXITCODE -ne 0) { throw 'Flutter ARM64 bootstrap failed.' }
+        }
+        $dartVersion = & dart --version 2>&1 | Out-String
+        if ($LASTEXITCODE -ne 0 -or $dartVersion -notmatch 'windows_arm64') {
+          throw "Native ARM64 Dart SDK is unavailable: $dartVersion"
+        }
+    - name: 配置桌面支持
+      shell: bash
+      env:
+        DESKTOP_PLATFORM: ${{ inputs.platform }}
+      run: |
+        if [ "$DESKTOP_PLATFORM" != none ]; then
+          flutter config "--enable-$DESKTOP_PLATFORM-desktop"
+        fi
+        if [ "$DESKTOP_PLATFORM" = macos ]; then
+          flutter config --no-enable-macos-arm64-only
+        fi
+    - name: 获取锁定依赖
+      shell: bash
+      run: flutter pub get --enforce-lockfile
+    - name: 缓存 CocoaPods
+      if: inputs.platform == 'macos'
+      uses: actions/cache@v5
+      with:
+        path: |
+          ~/Library/Caches/CocoaPods
+          macos/Pods
+        key: pods-v1-${{ runner.os }}-${{ runner.arch }}-${{ inputs.flutter-version }}-${{ hashFiles('macos/Podfile', 'macos/Podfile.lock', 'pubspec.lock') }}
+    - name: 缓存 Dart 增量构建
+      if: inputs.platform != 'none'
+      uses: actions/cache@v5
+      with:
+        path: .dart_tool/flutter_build
+        key: dart-build-v1-${{ runner.os }}-${{ runner.arch }}-${{ inputs.flutter-version }}-${{ inputs.cache-variant }}-${{ hashFiles('pubspec.lock', 'windows/**', 'macos/**', '!macos/Pods/**', '!macos/Flutter/ephemeral/**', '!windows/flutter/ephemeral/**') }}-${{ hashFiles('lib/**', 'assets/**', 'pubspec.yaml') }}
+        restore-keys: |
+          dart-build-v1-${{ runner.os }}-${{ runner.arch }}-${{ inputs.flutter-version }}-${{ inputs.cache-variant }}-${{ hashFiles('pubspec.lock', 'windows/**', 'macos/**', '!macos/Pods/**', '!macos/Flutter/ephemeral/**', '!windows/flutter/ephemeral/**') }}-
