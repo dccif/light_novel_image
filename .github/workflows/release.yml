@@ -6,7 +6,7 @@ on:
       version:
         description: '发布版本号 (例如: 1.0.0)'
         required: true
-        default: '1.0.7'
+        default: '1.0.8'
       language:
         description: 'README语言 (zh/en)'
         required: false
@@ -95,14 +95,16 @@ jobs:
         # 备份原文件
         cp pubspec.yaml pubspec.yaml.bak
         
-        # 更新版本号（保持build number +1）
+        # 保留 pubspec.yaml 中的构建号，避免发布时将 +3 等重置成 +1
+        buildNumber=$(sed -n 's/^version: [^+]*+\([0-9][0-9]*\).*$/\1/p' pubspec.yaml)
+        buildNumber=${buildNumber:-1}
         if [ "${{ matrix.platform }}" = "windows" ]; then
-          sed -i "s/^version: .*/version: $version+1/" pubspec.yaml
+          sed -i "s/^version: .*/version: $version+$buildNumber/" pubspec.yaml
         else
-          sed -i '' "s/^version: .*/version: $version+1/" pubspec.yaml
+          sed -i '' "s/^version: .*/version: $version+$buildNumber/" pubspec.yaml
         fi
         
-        echo "已更新pubspec.yaml版本号为: $version+1"
+        echo "已更新pubspec.yaml版本号为: $version+$buildNumber"
         
         # 显示变更
         echo "版本号变更:"

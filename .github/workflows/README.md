@@ -24,13 +24,13 @@
 
 ### 自动构建
 1. 推送代码到main分支 → 自动触发CI构建
-2. 创建发布版本时，使用 `Release Build` 并输入版本号（例如 `1.0.7`）
+2. 创建发布版本时，使用 `Release Build` 并输入版本号（例如 `1.0.8`）
 
 ### 手动发布
 1. 进入GitHub仓库 → Actions标签页
 2. 选择"Release Build"工作流
 3. 点击"Run workflow"
-4. 输入版本号（如：1.0.7）
+4. 输入版本号（如：1.0.8）
 5. 点击"Run workflow"开始构建
 
 ### 快速测试构建
@@ -43,7 +43,7 @@
 
 ### 文件结构
 ```
-light_novel_image-v1.0.7-windows-x64.zip
+light_novel_image-v1.0.8-windows-x64.zip
 ├── light_novel_image.exe          # 主程序
 ├── flutter_windows.dll            # Flutter运行时
 ├── data/                          # 应用数据
