@@ -6,6 +6,18 @@ const os = require('node:os');
 const path = require('node:path');
 const {targets, resolveVersion, render, peArchitecture, elfArchitecture, sha256, collectPackages, verifyWindows, verifyMacOS} = require('./release.cjs');
 
+test('Dart CI cache restores native asset outputs as well as build metadata', () => {
+  const action = fs.readFileSync('.github/actions/setup-flutter/action.yml', 'utf8');
+  const cache = action.slice(action.indexOf('- name: 缓存 Dart 增量构建'));
+  const match = /        path: \|\r?\n((?:          [^\r\n]+\r?\n)+)/.exec(cache);
+  assert.ok(match, 'Dart build cache must have an explicit multi-path list');
+  const paths = match[1].trim().split(/\r?\n/).map(line => line.trim());
+  assert.ok(paths.includes('.dart_tool/flutter_build'));
+  assert.ok(paths.includes('build/native_assets'), 'INSTALL outputs must accompany the cached completion records');
+  assert.match(cache, /key: dart-build-v2-/);
+  assert.ok(!cache.includes('dart-build-v1-'), 'Do not restore incomplete v1 caches');
+});
+
 test('version overrides retain the build number and CRLF', () => {
   const result = resolveVersion('name: app\r\nversion: 1.0.8+3\r\n', '1.0.9');
   assert.equal(result.version, '1.0.9');

@@ -34,7 +34,7 @@ jobs:
           cache-variant: manual-${{ inputs.build_type }}
       - name: 构建应用
         shell: bash
-        run: flutter build windows --"$BUILD_TYPE" --no-pub
+        run: flutter build windows --"$BUILD_TYPE" --no-pub --verbose
       - name: 校验架构并创建测试包
         id: package
         uses: actions/github-script@v8

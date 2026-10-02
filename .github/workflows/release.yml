@@ -88,7 +88,13 @@ jobs:
           cache-variant: release-${{ needs.prepare.outputs.version }}-${{ needs.prepare.outputs.build_number }}
       - name: 构建发布版本（每个平台仅一次）
         shell: bash
-        run: flutter build "$PACKAGE_PLATFORM" --release --no-pub --build-name="$RELEASE_VERSION" --build-number="$BUILD_NUMBER"
+        run: |
+          build_flags=()
+          if [ "$PACKAGE_PLATFORM" = windows ]; then
+            # Otherwise Flutter hides the underlying CMake INSTALL error.
+            build_flags+=(--verbose)
+          fi
+          flutter build "$PACKAGE_PLATFORM" --release --no-pub --build-name="$RELEASE_VERSION" --build-number="$BUILD_NUMBER" "${build_flags[@]}"
       - name: 校验架构、打包和生成 SHA256
         id: package
         uses: actions/github-script@v8

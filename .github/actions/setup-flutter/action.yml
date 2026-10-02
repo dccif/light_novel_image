@@ -71,7 +71,12 @@ runs:
       if: inputs.platform != 'none'
       uses: actions/cache@v5
       with:
-        path: .dart_tool/flutter_build
-        key: dart-build-v1-${{ runner.os }}-${{ runner.arch }}-${{ inputs.flutter-version }}-${{ inputs.cache-variant }}-${{ hashFiles('pubspec.lock', 'windows/**', 'macos/**', '!macos/Pods/**', '!macos/Flutter/ephemeral/**', '!windows/flutter/ephemeral/**') }}-${{ hashFiles('lib/**', 'assets/**', 'pubspec.yaml') }}
+        # Flutter caches install_code_assets completion in flutter_build, but
+        # CMake installs its output from build/native_assets. Restore both or a
+        # cache hit can skip generation and fail INSTALL.vcxproj on a clean VM.
+        path: |
+          .dart_tool/flutter_build
+          build/native_assets
+        key: dart-build-v2-${{ runner.os }}-${{ runner.arch }}-${{ inputs.flutter-version }}-${{ inputs.cache-variant }}-${{ hashFiles('pubspec.lock', 'windows/**', 'macos/**', '!macos/Pods/**', '!macos/Flutter/ephemeral/**', '!windows/flutter/ephemeral/**') }}-${{ hashFiles('lib/**', 'assets/**', 'pubspec.yaml') }}
         restore-keys: |
-          dart-build-v1-${{ runner.os }}-${{ runner.arch }}-${{ inputs.flutter-version }}-${{ inputs.cache-variant }}-${{ hashFiles('pubspec.lock', 'windows/**', 'macos/**', '!macos/Pods/**', '!macos/Flutter/ephemeral/**', '!windows/flutter/ephemeral/**') }}-
+          dart-build-v2-${{ runner.os }}-${{ runner.arch }}-${{ inputs.flutter-version }}-${{ inputs.cache-variant }}-${{ hashFiles('pubspec.lock', 'windows/**', 'macos/**', '!macos/Pods/**', '!macos/Flutter/ephemeral/**', '!windows/flutter/ephemeral/**') }}-
