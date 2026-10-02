@@ -1,6 +1,10 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:archive/archive_io.dart';
+import 'package:light_novel_image/models/image_entry.dart';
+import 'package:light_novel_image/services/image_resolution_service.dart';
+
 import 'package:archive/archive.dart';
 import 'package:flutter/foundation.dart';
 import 'package:light_novel_image/models/book_info.dart';
@@ -41,6 +45,13 @@ class EpubParserService {
   }
 
   static String _resolveArchivePath(String value, String basePath) {
+    value = value.split('#').first.split('?').first;
+    try {
+      value = Uri.decodeComponent(value);
+    } on FormatException {
+      /* 保留非 URI 的路径 */
+    }
+    if (value.startsWith('/')) return _normalizeArchivePath(value.substring(1));
     if (value.startsWith('/') || value.contains('://')) {
       return _normalizeArchivePath(value);
     }
@@ -49,15 +60,10 @@ class EpubParserService {
     );
   }
 
-  static ArchiveFile? _findArchiveFile(Archive archive, String archivePath) {
-    final normalizedPath = _normalizeArchivePath(archivePath).toLowerCase();
-    for (final file in archive.files) {
-      if (_normalizeArchivePath(file.name).toLowerCase() == normalizedPath) {
-        return file;
-      }
-    }
-    return null;
-  }
+  static ArchiveFile? _findArchiveFile(
+    Map<String, ArchiveFile> archive,
+    String archivePath,
+  ) => archive[_normalizeArchivePath(archivePath).toLowerCase()];
 
   static XmlDocument? _parseXmlFile(ArchiveFile? file) {
     if (file == null) return null;
@@ -68,7 +74,7 @@ class EpubParserService {
     }
   }
 
-  static String? _locateOpfPath(Archive archive) {
+  static String? _locateOpfPath(Map<String, ArchiveFile> archive) {
     final container = _parseXmlFile(
       _findArchiveFile(archive, 'META-INF/container.xml'),
     );
@@ -80,23 +86,12 @@ class EpubParserService {
       }
     }
 
-    for (final file in archive.files) {
+    for (final file in archive.values) {
       if (file.isFile && file.name.toLowerCase().endsWith('.opf')) {
         return _normalizeArchivePath(file.name);
       }
     }
     return null;
-  }
-
-  static String _extractTitleFromArchive(Archive archive, String filePath) {
-    final opfPath = _locateOpfPath(archive);
-    final opf = opfPath == null
-        ? null
-        : _parseXmlFile(_findArchiveFile(archive, opfPath));
-    final title = opf?.findAllElements('title').firstOrNull?.innerText.trim();
-    return title == null || title.isEmpty
-        ? path.basenameWithoutExtension(filePath)
-        : title;
   }
 
   static Map<String, String> _extractManifest(XmlDocument opf, String opfPath) {
@@ -112,7 +107,7 @@ class EpubParserService {
   }
 
   static Map<String, String> _extractTocTitles(
-    Archive archive,
+    Map<String, ArchiveFile> archive,
     XmlDocument opf,
     String opfPath,
     Map<String, String> manifest,
@@ -211,68 +206,63 @@ class EpubParserService {
     return '第 $chapterOrder 章';
   }
 
-  static String _htmlToText(String markup) {
-    var text = markup
-        .replaceAll(
-          RegExp(r'<(script|style)\b[^>]*>[\s\S]*?</\1>', caseSensitive: false),
-          '',
-        )
-        .replaceAll(
-          RegExp(
-            r'<\s*/?\s*(p|div|br|li|h[1-6]|blockquote|section)\b[^>]*>',
-            caseSensitive: false,
-          ),
-          '\n',
-        )
-        .replaceAll(RegExp(r'<[^>]+>'), '');
-    const entities = {
-      '&nbsp;': ' ',
-      '&amp;': '&',
-      '&lt;': '<',
-      '&gt;': '>',
-      '&quot;': '"',
-      '&#39;': "'",
-    };
-    for (final entry in entities.entries) {
-      text = text.replaceAll(entry.key, entry.value);
+  /// 每个文档只遍历一次，同时生成纯文本和全部图片的精确偏移。
+  static _ChapterText _readChapter(XmlDocument document, String contentPath) {
+    final text = _TextBuilder();
+    final positions = <String, int>{};
+    void visit(XmlNode node) {
+      if (node is XmlText) {
+        text.write(node.value);
+      } else if (node is XmlElement) {
+        final tag = node.name.local.toLowerCase();
+        if (const {'head', 'script', 'style'}.contains(tag)) return;
+        final block = const {
+          'p',
+          'div',
+          'br',
+          'li',
+          'blockquote',
+          'section',
+          'h1',
+          'h2',
+          'h3',
+          'h4',
+          'h5',
+          'h6',
+          'tr',
+        }.contains(tag);
+        if (block) text.breakParagraph();
+        if (tag == 'img' || tag == 'image') {
+          final source =
+              node.getAttribute('src') ??
+              node.attributes
+                  .where((a) => a.name.local == 'href')
+                  .firstOrNull
+                  ?.value;
+          if (source != null &&
+              source.isNotEmpty &&
+              !source.startsWith('data:')) {
+            positions.putIfAbsent(
+              _resolveArchivePath(source, contentPath),
+              () => text.length,
+            );
+          }
+        }
+        for (final child in node.children) {
+          visit(child);
+        }
+        if (block) text.breakParagraph();
+      } else {
+        for (final child in node.children) {
+          visit(child);
+        }
+      }
     }
-    return text
-        .split(RegExp(r'\r?\n'))
-        .map(
-          (line) => line
-              .split(RegExp(r'\s+'))
-              .where((part) => part.isNotEmpty)
-              .join(' '),
-        )
-        .where((line) => line.isNotEmpty)
-        .join('\n\n')
-        .trim();
+
+    visit(document);
+    return _ChapterText(text.toString(), positions);
   }
 
-  static _ImagePositionedText? _fullTextWithImagePosition(
-    String markup,
-    String imageReference,
-  ) {
-    final index = markup.indexOf(imageReference);
-    if (index < 0) return null;
-
-    final tagStart = markup.lastIndexOf('<', index);
-    final tagEnd = markup.indexOf('>', index + imageReference.length);
-    if (tagStart < 0 || tagEnd < 0) return null;
-
-    // 与完整章节使用同一份纯文本转换，确保在整本书正文中定位时偏移量
-    // 不会因图片占位符额外引入的换行而漂移。
-    final content = _htmlToText(markup);
-    final imageOffset = _htmlToText(markup.substring(0, tagStart)).length;
-    return _ImagePositionedText(
-      content: content,
-      imageOffset: imageOffset.clamp(0, content.length),
-    );
-  }
-
-  /// 从一个 XHTML 内容文件中提取图片旁的正文。
-  ///
-  /// 返回键为 EPUB 内的规范化图片路径；纯图片页会返回空映射。
   @visibleForTesting
   static Map<String, ImageContext> extractImageContextsFromContent({
     required String contentPath,
@@ -280,212 +270,203 @@ class EpubParserService {
     required String chapterTitle,
     required int chapterOrder,
   }) {
-    XmlDocument document;
     try {
-      document = XmlDocument.parse(content);
+      final chapter = _readChapter(XmlDocument.parse(content), contentPath);
+      if (chapter.content.length < 12) return const {};
+      final document = BookText(chapter.content);
+      return chapter.positions.map(
+        (key, offset) => MapEntry(
+          key,
+          ImageContext(
+            chapterTitle: chapterTitle,
+            chapterOrder: chapterOrder,
+            content: chapter.content,
+            imageOffset: offset,
+            document: document,
+          ),
+        ),
+      );
     } catch (_) {
       return const {};
     }
-
-    final contexts = <String, ImageContext>{};
-    for (final tagName in ['img', 'image']) {
-      for (final image in document.findAllElements(tagName)) {
-        final source = image.getAttribute('src') ?? image.getAttribute('href');
-        if (source == null || source.isEmpty || source.startsWith('data:')) {
-          continue;
-        }
-        final positionedText = _fullTextWithImagePosition(content, source);
-        // 过滤只有装饰性标题或空白的图片页，避免连续彩图显示面板。
-        if (positionedText == null || positionedText.content.length < 12) {
-          continue;
-        }
-        contexts.putIfAbsent(
-          _resolveArchivePath(source, contentPath),
-          () => ImageContext(
-            chapterTitle: chapterTitle,
-            chapterOrder: chapterOrder,
-            content: positionedText.content,
-            imageOffset: positionedText.imageOffset,
-          ),
-        );
-      }
-    }
-    return contexts;
   }
 
   static Map<String, ImageContext> _extractImageContexts(
-    Archive archive,
+    Map<String, ArchiveFile> archive,
+    XmlDocument? opf,
     String? opfPath,
   ) {
-    if (opfPath == null) return const {};
-    final opf = _parseXmlFile(_findArchiveFile(archive, opfPath));
-    if (opf == null) return const {};
-
+    if (opf == null || opfPath == null) return const {};
     final manifest = _extractManifest(opf, opfPath);
-    final tocTitles = _extractTocTitles(archive, opf, opfPath, manifest);
-    final imageLocations = <String, _ImageLocation>{};
-    final bookContent = StringBuffer();
+    final titles = _extractTocTitles(archive, opf, opfPath, manifest);
     final spine = _extractSpine(opf, manifest);
-
-    for (var index = 0; index < spine.length; index++) {
-      final contentPath = spine[index];
+    final locations = <String, _ImageLocation>{};
+    final content = StringBuffer();
+    for (var i = 0; i < spine.length; i++) {
+      final contentPath = spine[i];
       if (!_contentExtensions.contains(
         path.posix.extension(contentPath).toLowerCase(),
       )) {
         continue;
       }
-      final contentFile = _findArchiveFile(archive, contentPath);
-      final content = contentFile == null
-          ? null
-          : _safeDecodeBytes(contentFile.content as List<int>);
-      if (content == null) continue;
-      final document = _parseXmlFile(contentFile);
-      if (document == null) continue;
-
-      final chapterTitle = _chapterTitle(
-        document,
-        contentPath,
-        tocTitles,
-        index + 1,
-      );
-      final chapterContexts = extractImageContextsFromContent(
-        contentPath: contentPath,
-        content: content,
-        chapterTitle: chapterTitle,
-        chapterOrder: index + 1,
-      );
-
-      // 保存完整 spine 正文。打开图片后，用户可从当前位置继续上下阅读整本书。
-      final chapterText = _htmlToText(content);
-      if (chapterText.isEmpty) continue;
-      if (bookContent.isNotEmpty) bookContent.write('\n\n\n');
-      bookContent.write(chapterTitle);
-      bookContent.write('\n\n');
-      final chapterTextOffset = bookContent.length;
-      bookContent.write(chapterText);
-
-      for (final entry in chapterContexts.entries) {
-        imageLocations.putIfAbsent(
-          entry.key,
-          () => _ImageLocation(
-            chapterTitle: entry.value.chapterTitle,
-            chapterOrder: entry.value.chapterOrder,
-            imageOffset: chapterTextOffset + entry.value.imageOffset,
-          ),
-        );
+      final file = _findArchiveFile(archive, contentPath);
+      final xml = _parseXmlFile(file);
+      if (xml == null) continue;
+      final chapter = _readChapter(xml, contentPath);
+      file?.clear();
+      if (chapter.content.isEmpty) continue;
+      final title = _chapterTitle(xml, contentPath, titles, i + 1);
+      if (content.isNotEmpty) content.write('\n\n');
+      content.write(title);
+      content.write('\n\n');
+      final base = content.length;
+      content.write(chapter.content);
+      if (chapter.content.length >= 12) {
+        for (final entry in chapter.positions.entries) {
+          locations.putIfAbsent(
+            entry.key,
+            () => _ImageLocation(
+              chapterTitle: title,
+              chapterOrder: i + 1,
+              imageOffset: base + entry.value,
+            ),
+          );
+        }
       }
     }
-
-    final fullBookContent = bookContent.toString().trim();
-    if (fullBookContent.isEmpty) return const {};
-    return imageLocations.map(
-      (imagePath, location) => MapEntry(
-        imagePath,
+    final fullText = content.toString();
+    final document = BookText(fullText);
+    return locations.map(
+      (key, location) => MapEntry(
+        key,
         ImageContext(
           chapterTitle: location.chapterTitle,
           chapterOrder: location.chapterOrder,
-          content: fullBookContent,
-          imageOffset: location.imageOffset.clamp(0, fullBookContent.length),
+          content: fullText,
+          imageOffset: location.imageOffset,
+          document: document,
         ),
       ),
     );
   }
 
-  static List<_ExtractedImage> _extractImagesFromArchive(Archive archive) {
-    final images = <_ExtractedImage>[];
-    for (final file in archive.files) {
-      final fileName = file.name.toLowerCase();
-      if (file.isFile && _imageExtensions.any(fileName.endsWith)) {
-        images.add(
-          _ExtractedImage(
-            bytes: Uint8List.fromList(file.content as List<int>),
-            archivePath: _normalizeArchivePath(file.name),
-            displayName: path.posix.basename(file.name),
-          ),
-        );
-      }
-    }
-    images.sort((a, b) => a.archivePath.compareTo(b.archivePath));
-    return images;
-  }
-
-  static Future<_ParsedBook> _parseSingleEpub(
-    String epubPath,
-    int currentImageCount,
-  ) async {
-    try {
-      final archive = ZipDecoder().decodeBytes(
-        await File(epubPath).readAsBytes(),
-      );
-      final opfPath = _locateOpfPath(archive);
-      final images = _extractImagesFromArchive(archive);
-      final contextByImagePath = _extractImageContexts(archive, opfPath);
-      final bookInfo = BookInfo(
-        title: _extractTitleFromArchive(archive, epubPath),
-        filePath: epubPath,
-        startImageIndex: currentImageCount,
-        endImageIndex: currentImageCount + images.length - 1,
-      );
-      return _ParsedBook(
-        bookInfo: bookInfo,
-        images: images,
-        imageContexts: images
-            .map((image) => contextByImagePath[image.archivePath])
-            .toList(),
-      );
-    } catch (error) {
-      debugPrint('解析epub文件失败: $epubPath, 错误: $error');
-      return _ParsedBook(
-        bookInfo: BookInfo(
-          title: '${path.basenameWithoutExtension(epubPath)} (解析失败)',
-          filePath: epubPath,
-          startImageIndex: currentImageCount,
-          endImageIndex: currentImageCount - 1,
-        ),
-        images: const [],
-        imageContexts: const [],
-      );
-    }
-  }
-
-  /// 后台解析多个 EPUB，包括图片所属章节的文本上下文。
+  /// 在同一个 isolate 内流式解包、读取正文和图片尺寸。
   static Future<EpubParseResult> parseMultipleEpubs(
-    List<String> epubPaths,
+    EpubImportRequest request,
   ) async {
     final books = <BookInfo>[];
-    final allImages = <Uint8List>[];
-    final allImageNames = <String>[];
-    final imageBookIndexes = <int>[];
-    final imageContexts = <ImageContext?>[];
-
-    for (var bookIndex = 0; bookIndex < epubPaths.length; bookIndex++) {
-      final parsedBook = await _parseSingleEpub(
-        epubPaths[bookIndex],
-        allImages.length,
-      );
-      books.add(parsedBook.bookInfo);
-      for (var index = 0; index < parsedBook.images.length; index++) {
-        final image = parsedBook.images[index];
-        allImages.add(image.bytes);
-        allImageNames.add(image.displayName);
-        imageBookIndexes.add(bookIndex);
-        imageContexts.add(parsedBook.imageContexts[index]);
+    final images = <ImageEntry>[];
+    var remainingMemory = request.memoryBudget;
+    for (var bookIndex = 0; bookIndex < request.paths.length; bookIndex++) {
+      final epubPath = request.paths[bookIndex];
+      final start = images.length;
+      InputFileStream? input;
+      var title = path.basenameWithoutExtension(epubPath);
+      try {
+        input = InputFileStream(epubPath);
+        final zip = ZipDecoder().decodeStream(input);
+        final archive = {
+          for (final file in zip.files)
+            _normalizeArchivePath(file.name).toLowerCase(): file,
+        };
+        final opfPath = _locateOpfPath(archive);
+        final opf = opfPath == null
+            ? null
+            : _parseXmlFile(_findArchiveFile(archive, opfPath));
+        final opfTitle = opf
+            ?.findAllElements('title')
+            .firstOrNull
+            ?.innerText
+            .trim();
+        if (opfTitle != null && opfTitle.isNotEmpty) title = opfTitle;
+        final contexts = _extractImageContexts(archive, opf, opfPath);
+        final fallbackContexts = {
+          for (final entry in contexts.entries)
+            entry.key.toLowerCase(): entry.value,
+        };
+        final files =
+            zip.files
+                .where(
+                  (file) =>
+                      file.isFile &&
+                      _imageExtensions.contains(
+                        path.posix.extension(file.name).toLowerCase(),
+                      ),
+                )
+                .toList()
+              ..sort((a, b) => a.name.compareTo(b.name));
+        // 小书保留原始 Uint8List；总内存预算不足时，整本书落盘。
+        final keepInMemory =
+            files.fold<int>(0, (sum, f) => sum + f.size) <= remainingMemory;
+        final bookImages = <ImageEntry>[];
+        for (var i = 0; i < files.length; i++) {
+          final file = files[i];
+          final archivePath = _normalizeArchivePath(file.name);
+          Uint8List? bytes;
+          String? filePath;
+          ImageResolution resolution;
+          if (keepInMemory) {
+            bytes = file.content;
+            resolution = ImageResolutionService.getImageResolution(bytes);
+          } else {
+            // 文件名不采用 EPUB 路径，防止 Zip Slip 和同名图片覆盖。
+            filePath = path.join(
+              request.cacheDirectory,
+              '${bookIndex}_$i${path.posix.extension(archivePath)}',
+            );
+            final output = OutputFileStream(filePath);
+            try {
+              file.writeContent(output);
+            } finally {
+              output.closeSync();
+            }
+            resolution = ImageResolutionService.getFileResolution(
+              File(filePath),
+            );
+          }
+          file.clear();
+          bookImages.add(
+            ImageEntry(
+              id: '${request.cacheDirectory}|$bookIndex|$archivePath',
+              archivePath: archivePath,
+              name: path.posix.basename(archivePath),
+              bookIndex: bookIndex,
+              resolution: resolution,
+              context:
+                  contexts[archivePath] ??
+                  fallbackContexts[archivePath.toLowerCase()],
+              bytes: bytes,
+              filePath: filePath,
+            ),
+          );
+        }
+        images.addAll(bookImages);
+        if (keepInMemory) {
+          remainingMemory -= bookImages.fold<int>(
+            0,
+            (sum, image) => sum + image.bytes!.length,
+          );
+        }
+      } catch (error) {
+        debugPrint('解析 EPUB 失败: $epubPath: $error');
+        title = '$title (解析失败)';
+      } finally {
+        input?.closeSync();
       }
+      books.add(
+        BookInfo(
+          title: title,
+          filePath: epubPath,
+          startImageIndex: start,
+          endImageIndex: images.length - 1,
+        ),
+      );
     }
-
     return EpubParseResult(
       books: books,
-      allImages: allImages,
-      allImageNames: allImageNames,
-      imageBookIndexes: imageBookIndexes,
-      imageContexts: imageContexts,
-      imageResolutions: const [],
-      resolutionStatistics: const ResolutionStatistics(
-        resolutionCounts: {},
-        mostCommonResolution: null,
-        mostCommonResolutionCount: 0,
-        maxWidth: 0,
-        maxHeight: 0,
+      images: images,
+      resolutionStatistics: calculateResolutionStatistics(
+        images.map((e) => e.resolution).toList(),
       ),
     );
   }
@@ -524,45 +505,45 @@ class EpubParserService {
   }
 }
 
-class _ExtractedImage {
-  final Uint8List bytes;
-  final String archivePath;
-  final String displayName;
-
-  const _ExtractedImage({
-    required this.bytes,
-    required this.archivePath,
-    required this.displayName,
-  });
-}
-
-class _ParsedBook {
-  final BookInfo bookInfo;
-  final List<_ExtractedImage> images;
-  final List<ImageContext?> imageContexts;
-
-  const _ParsedBook({
-    required this.bookInfo,
-    required this.images,
-    required this.imageContexts,
-  });
-}
-
-class _ImagePositionedText {
+class _ChapterText {
   final String content;
-  final int imageOffset;
+  final Map<String, int> positions;
+  const _ChapterText(this.content, this.positions);
+}
 
-  const _ImagePositionedText({
-    required this.content,
-    required this.imageOffset,
-  });
+/// 段落分隔和空白延迟写入，图片偏移始终对应已写入的正文。
+class _TextBuilder {
+  static final _whitespace = RegExp(r'\s+');
+  final _buffer = StringBuffer();
+  String _pending = '';
+  int get length => _buffer.length;
+  void breakParagraph() {
+    if (_buffer.isNotEmpty) _pending = '\n\n';
+  }
+
+  void write(String value) {
+    final normalized = value.replaceAll(_whitespace, ' ');
+    final text = normalized.trim();
+    if (text.isEmpty) {
+      if (_buffer.isNotEmpty && _pending.isEmpty) _pending = ' ';
+      return;
+    }
+    if (_buffer.isNotEmpty) {
+      if (_pending.isEmpty && normalized.startsWith(' ')) _pending = ' ';
+      _buffer.write(_pending);
+    }
+    _pending = normalized.endsWith(' ') ? ' ' : '';
+    _buffer.write(text);
+  }
+
+  @override
+  String toString() => _buffer.toString();
 }
 
 class _ImageLocation {
   final String chapterTitle;
   final int chapterOrder;
   final int imageOffset;
-
   const _ImageLocation({
     required this.chapterTitle,
     required this.chapterOrder,

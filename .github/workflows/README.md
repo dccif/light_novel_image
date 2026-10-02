@@ -60,9 +60,10 @@ light_novel_image-v1.0.7-windows-x64.zip
 ## 🔧 配置说明
 
 ### Flutter版本
-- 当前使用: `3.44.8`
+- 当前使用: `3.47.6`（Dart `3.13.5`）
 - 渠道: `stable`
 - 支持缓存以加速构建
+- 本地通过 mise 管理 Flutter；升级后请同步更新三个工作流的 `flutter-version`、`pubspec.yaml` 的 SDK 约束与项目 README。
 
 ### 构建环境
 - 运行器: `windows-latest`

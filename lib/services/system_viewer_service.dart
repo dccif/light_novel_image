@@ -1,67 +1,101 @@
 import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 import 'package:path/path.dart' as path;
 import 'package:path_provider/path_provider.dart';
 import 'package:window_manager/window_manager.dart';
 
 class SystemViewerService {
-  static Directory? _tempDir;
+  static Future<Directory>? _directory;
+  static final _exports = <String, Future<String>>{};
+  static final _exporting = <String>{};
+  static int _nextFile = 0;
 
-  /// 初始化临时目录
-  static Future<void> initTempDir() async {
-    final tempDir = await getTemporaryDirectory();
-    _tempDir = await Directory(
-      path.join(tempDir.path, 'epub_viewer'),
-    ).create(recursive: true);
-  }
+  /// 导出会话与导入缓存隔离。离开页面不删除剪贴板或外部应用仍在引用的文件。
+  static Future<Directory> _exportDirectory() =>
+      _directory ??= _createExportDirectory();
 
-  /// 清理临时文件
-  static Future<void> cleanupTempFiles() async {
-    if (_tempDir != null && await _tempDir!.exists()) {
+  static Future<Directory> _createExportDirectory() async {
+    final temp = await getTemporaryDirectory();
+    final root = await Directory(path.join(temp.path, 'epub_viewer_exports'))
+        .create(recursive: true);
+    // 只清理应用自建目录下、七天前的会话；不跟随符号链接。
+    final cutoff = DateTime.now().subtract(const Duration(days: 7));
+    await for (final entity in root.list(followLinks: false)) {
+      if (entity is! Directory ||
+          !path.basename(entity.path).startsWith('session_')) {
+        continue;
+      }
+      if (!path.isWithin(root.path, entity.path)) continue;
       try {
-        await _tempDir!.delete(recursive: true);
-      } catch (e) {
-        debugPrint('清理临时文件失败: $e');
+        if ((await entity.stat()).modified.isBefore(cutoff)) {
+          await entity.delete(recursive: true);
+        }
+      } catch (error) {
+        debugPrint('过期导出文件清理失败: $error');
       }
     }
+    return root.createTemp('session_');
   }
 
-  /// 获取临时文件路径
-  static Future<String> _getTempFilePath(
-    String imageName, [
-    String? bookIdentifier,
-  ]) async {
-    if (_tempDir == null) {
-      await initTempDir();
-    }
-
-    // 如果提供了书籍标识符，添加到文件名前面
-    String fileName = imageName;
-    if (bookIdentifier != null && bookIdentifier.isNotEmpty) {
-      // 清理书籍标识符，移除不合法的文件名字符
-      final cleanBookId = bookIdentifier
-          .replaceAll(RegExp(r'[<>:"/\\|?*]'), '_')
-          .replaceAll(RegExp(r'\s+'), '_');
-      fileName = '${cleanBookId}_$imageName';
-    }
-
-    return path.join(_tempDir!.path, fileName);
-  }
-
-  /// 确保临时文件存在
-  static Future<String> _ensureTempFileExists(
+  static Future<String> prepareImageFile(
     Uint8List imageData,
     String imageName, [
     String? bookIdentifier,
-  ]) async {
-    final tempFilePath = await _getTempFilePath(imageName, bookIdentifier);
-    final tempFile = File(tempFilePath);
-
-    if (!await tempFile.exists()) {
-      await tempFile.writeAsBytes(imageData);
+  ]) {
+    final key = bookIdentifier ?? imageName;
+    final existing = _exports.remove(key);
+    if (existing != null) {
+      _exports[key] = existing;
+      return existing;
     }
+    // 只保留最近的路径映射；落盘导出仍按七天保留，避免破坏剪贴板引用。
+    _pruneExportPaths();
+    _exporting.add(key);
+    return _exports.putIfAbsent(
+      key,
+      () => _writeExport(imageData, imageName, key),
+    );
+  }
 
-    return tempFilePath;
+  static void _pruneExportPaths() {
+    for (final key in _exports.keys.toList()) {
+      if (_exports.length < 128) break;
+      if (!_exporting.contains(key)) _exports.remove(key);
+    }
+  }
+
+  static Future<String> _writeExport(
+    Uint8List data,
+    String imageName,
+    String key,
+  ) async {
+    try {
+      final directory = await _exportDirectory();
+      final safeName = path
+          .basename(imageName)
+          .replaceAll(RegExp(r'[<>:"/\\|?*]'), '_');
+      final file = File(path.join(directory.path, '${_nextFile++}_$safeName'));
+      await file.writeAsBytes(data, flush: true);
+      return file.path;
+    } catch (_) {
+      _exports.remove(key);
+      _directory = null;
+      rethrow;
+    } finally {
+      _exporting.remove(key);
+      _pruneExportPaths();
+    }
+  }
+
+  static Future<void> _backgroundWindow() async {
+    if (kIsWeb) return;
+    try {
+      await windowManager.setAlwaysOnTop(false);
+      await windowManager.blur();
+    } catch (error) {
+      debugPrint('窗口后置失败: $error');
+    }
   }
 
   /// 复制文件到剪贴板
@@ -71,7 +105,7 @@ class SystemViewerService {
     String? bookIdentifier,
   ]) async {
     try {
-      final tempFilePath = await _ensureTempFileExists(
+      final tempFilePath = await prepareImageFile(
         imageData,
         imageName,
         bookIdentifier,
@@ -80,8 +114,10 @@ class SystemViewerService {
       if (Platform.isWindows) {
         // Windows: 使用 PowerShell 复制文件到剪贴板
         final result = await Process.run('powershell', [
+          '-NoProfile',
+          '-NonInteractive',
           '-Command',
-          'Set-Clipboard -Path "$tempFilePath"',
+          "Set-Clipboard -LiteralPath '${tempFilePath.replaceAll("'", "''")}'",
         ]);
 
         if (result.exitCode == 0) {
@@ -131,24 +167,13 @@ class SystemViewerService {
     String? bookIdentifier,
   ]) async {
     try {
-      final tempFilePath = await _ensureTempFileExists(
+      final tempFilePath = await prepareImageFile(
         imageData,
         imageName,
         bookIdentifier,
       );
 
-      // 在调用外部应用之前，强制让当前窗口后置
-      if (!kIsWeb) {
-        try {
-          // 先确保窗口不在最顶层
-          await windowManager.setAlwaysOnTop(false);
-
-          // 让窗口失去焦点并后置
-          await windowManager.blur();
-        } catch (e) {
-          debugPrint('窗口后置失败: $e');
-        }
-      }
+      await _backgroundWindow();
 
       if (Platform.isWindows) {
         await Process.run('explorer.exe', [tempFilePath]);
@@ -172,24 +197,13 @@ class SystemViewerService {
     String? bookIdentifier,
   ]) async {
     try {
-      final tempFilePath = await _ensureTempFileExists(
+      final tempFilePath = await prepareImageFile(
         imageData,
         imageName,
         bookIdentifier,
       );
 
-      // 在调用外部应用之前，强制让当前窗口后置
-      if (!kIsWeb) {
-        try {
-          // 先确保窗口不在最顶层
-          await windowManager.setAlwaysOnTop(false);
-
-          // 让窗口失去焦点并后置
-          await windowManager.blur();
-        } catch (e) {
-          debugPrint('窗口后置失败: $e');
-        }
-      }
+      await _backgroundWindow();
 
       if (Platform.isWindows) {
         // Windows: 使用 rundll32 显示"打开方式"对话框

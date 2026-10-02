@@ -2,7 +2,7 @@
 
 一个轻小说的EPUB图片浏览器，采用Flutter开发，支持Windows、macOS和Linux桌面平台。
 
-[![Flutter](https://img.shields.io/badge/flutter-3.44.8-blue)](https://flutter.dev/)
+[![Flutter](https://img.shields.io/badge/flutter-3.47.6-blue)](https://flutter.dev/)
 [![Latest Release](https://img.shields.io/github/v/release/dccif/light_novel_image?include_prereleases)](https://github.com/dccif/light_novel_image/releases/latest)
 [![License](https://img.shields.io/github/license/dccif/light_novel_image)](https://github.com/dccif/light_novel_image/blob/main/LICENSE)
 [![Platform](https://img.shields.io/badge/platform-Windows%7CMacOS-lightgrey)](https://github.com/dccif/light_novel_image)
@@ -19,6 +19,7 @@
 - 📖 **图片原文上下文** - 查看图片时可阅读该图片在 EPUB 正文中的原文位置，并可继续滚动阅读整本书
 - 📍 **原文位置定位** - 清晰标记图片原文位置；离开可视范围后可一键返回
 - ⌨️ **快捷键导航** - 无论焦点位于图片或原文面板，均可使用左右方向键切换图片
+- ⚡ **低内存浏览** - 缩略图按显示像素解码，大书图片按需读取，正文按段落懒布局
 
 ## 🎬 演示
 
@@ -40,8 +41,8 @@
 
 ### 环境要求
 
-- Flutter SDK 3.44.8 或更高版本
-- Dart SDK 3.12.2 或更高版本
+- Flutter SDK 3.47.6 或更高版本
+- Dart SDK 3.13.5 或更高版本
 - 理论上支持的操作系统：Windows 10+、macOS 10.15+、Linux (Ubuntu 18.04+)
 
 ### 安装步骤
@@ -53,6 +54,8 @@
    ```
 
 2. **安装依赖**
+   本地 Flutter 通过 mise 管理，可先执行 `mise install flutter@latest`，再使用 `mise exec -- flutter pub get`。CI 固定使用 Flutter 3.47.6，以便复现构建结果。
+
    ```bash
    flutter pub get
    ```
@@ -87,7 +90,7 @@ flutter build linux
 ## 🛠️ 技术栈
 
 - **当前版本**: 1.0.7
-- **Framework**: Flutter 3.44.8 / Dart 3.12.2
+- **Framework**: Flutter 3.47.6 / Dart 3.13.5
 - **UI库**: Fluent UI (Windows风格界面)
 - **路由**: GoRouter
 - **文件处理**: 
@@ -98,12 +101,34 @@ flutter build linux
 - **EPUB 解析**: Archive + XML（OPF、spine、导航目录与 XHTML 正文）
 - **窗口管理**: Window Manager + Flutter Acrylic
 
+## ⚡ 性能与缓存
+
+EPUB 通过文件流读取，每个 XHTML 只解析一次，图片尺寸也在同一次后台导入中读取。图片、名称、书籍归属、尺寸和上下文统一存储，排序仅维护一份索引。
+
+- 小书图片共用 **16 MiB** 编码字节预算；超过剩余预算的书籍图片落盘、按需读取。
+- 文件图片使用 **32 MiB / 32 项** LRU，并合并同图的并发读取。
+- Flutter 解码图片缓存上限为 **64 MiB / 80 项**；查看器仅预加载相邻图片，离开页面释放缓存。
+- 正文保留整本书，按可见段落排版，初始位置直接对齐图片标记，支持向前/向后阅读和文本选择。
+- 导入缓存按会话隔离；剪贴板及外部查看器的导出文件独立保留，新会话会清理超过七天的旧导出目录。
+
+这些是缓存预算，**不是进程总内存上限**；可见原图、正文、解码临时数据及 GPU 纹理仍会额外占用内存。
+
+验证命令与优化前后合成测量详见 [性能报告](docs/2026-10-02_performance-light-novel-image-report.md)。
+
+```powershell
+mise exec -- flutter analyze
+mise exec -- flutter test
+mise exec -- flutter test tool/benchmarks/context_performance_test.dart
+mise exec -- flutter build windows --release
+```
+
 ## 🙏 致谢
 
 感谢以下开源项目的支持：
+
 - [Flutter](https://flutter.dev/)
 - [Fluent UI](https://pub.dev/packages/fluent_ui)
-- [PhotoView](https://pub.dev/packages/photo_view)
+- [Extended Image](https://pub.dev/packages/extended_image)
 - [Window Manager](https://pub.dev/packages/window_manager)
 ---
 

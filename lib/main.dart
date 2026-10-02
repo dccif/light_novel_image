@@ -17,6 +17,9 @@ bool get isDesktop {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  // 仅限制保留的解码图片；当前可见图片、编码 LRU 和 GPU 纹理单独占用内存。
+  PaintingBinding.instance.imageCache.maximumSizeBytes = 64 * 1024 * 1024;
+  PaintingBinding.instance.imageCache.maximumSize = 80;
 
   if (isDesktop) {
     await flutter_acrylic.Window.initialize();

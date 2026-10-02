@@ -41,11 +41,13 @@ class _HomePageState extends State<HomePage> {
     final result = await FilePicker.pickFiles(
       type: FileType.custom,
       allowedExtensions: ['epub'],
-      allowMultiple: true,
     );
 
-    if (result != null) {
-      final files = result.files.map((file) => XFile(file.path!)).toList();
+    if (mounted && result.isNotEmpty) {
+      final files = result
+          .where((file) => file.path != null)
+          .map((file) => file.xFile)
+          .toList();
       _handleFileDrop(files);
     }
   }
@@ -95,21 +97,18 @@ class _HomePageState extends State<HomePage> {
                     height: double.infinity,
                     decoration: BoxDecoration(
                       color: _dragging
-                          ? FluentTheme.of(
-                              context,
-                            ).accentColor.withValues(alpha: 0.1)
+                          ? FluentTheme.of(context).accentColor
+                                .withValues(alpha: 0.1)
                           : _hovering
-                          ? FluentTheme.of(
-                              context,
-                            ).cardColor.withValues(alpha: 0.8)
+                          ? FluentTheme.of(context).cardColor
+                                .withValues(alpha: 0.8)
                           : FluentTheme.of(context).cardColor,
                       border: Border.all(
                         color: _dragging
                             ? FluentTheme.of(context).accentColor
                             : _hovering
-                            ? FluentTheme.of(
-                                context,
-                              ).accentColor.withValues(alpha: 0.6)
+                            ? FluentTheme.of(context).accentColor
+                                  .withValues(alpha: 0.6)
                             : Colors.grey.withValues(alpha: 0.3),
                         width: _dragging || _hovering ? 2 : 1,
                       ),
@@ -154,14 +153,12 @@ class _HomePageState extends State<HomePage> {
                               vertical: 8,
                             ),
                             decoration: BoxDecoration(
-                              color: FluentTheme.of(
-                                context,
-                              ).accentColor.withValues(alpha: 0.1),
+                              color: FluentTheme.of(context).accentColor
+                                  .withValues(alpha: 0.1),
                               borderRadius: BorderRadius.circular(20),
                               border: Border.all(
-                                color: FluentTheme.of(
-                                  context,
-                                ).accentColor.withValues(alpha: 0.3),
+                                color: FluentTheme.of(context).accentColor
+                                    .withValues(alpha: 0.3),
                               ),
                             ),
                             child: Text(

@@ -3,6 +3,24 @@ import 'package:light_novel_image/services/epub_parser_service.dart';
 
 void main() {
   group('EPUB 图片上下文解析', () {
+    test('同名引用、数字实体、SVG 与百分号路径在单次遍历中正确定位', () {
+      final contexts = EpubParserService.extractImageContextsFromContent(
+        contentPath: 'OEBPS/chapter.xhtml',
+        chapterTitle: '章节',
+        chapterOrder: 1,
+        content: '''<html xmlns:xlink="http://www.w3.org/1999/xlink"><head><title>不进入正文</title></head><body>
+        <p>第一段文本中提到了 Images/a.png，但这里并没有插图。&#x4E2D;文。</p>
+        <img src="Images/a.png"/><p>第一张插图后的剧情继续向前发展。</p>
+        <svg><image xlink:href="Images/%E5%9B%BE.png"/></svg><p>第二张插图之后。</p></body></html>''',
+      );
+      expect(contexts['OEBPS/Images/a.png']!.textBeforeImage, contains('中文。'));
+      expect(
+        contexts['OEBPS/Images/a.png']!.textAfterImage,
+        startsWith('第一张插图后的剧情'),
+      );
+      expect(contexts['OEBPS/Images/图.png']!.textBeforeImage, contains('剧情继续'));
+      expect(contexts.values.first.content, isNot(contains('不进入正文')));
+    });
     test('关联图片前后的正文和章节信息', () {
       const content = '''
         <html><body>

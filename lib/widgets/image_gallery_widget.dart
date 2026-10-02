@@ -4,25 +4,25 @@ import 'package:flutter/gestures.dart';
 import 'package:extended_image/extended_image.dart';
 import 'package:light_novel_image/models/image_context.dart';
 import 'package:light_novel_image/services/system_viewer_service.dart';
-import 'package:light_novel_image/utils/scroll_visibility.dart';
+
+import '../models/image_entry.dart';
+import '../services/image_data_cache.dart';
+import 'epub_image.dart';
+import 'image_context_panel.dart';
 
 class ImageGalleryWidget extends StatefulWidget {
-  final List<Uint8List> images;
-  final List<String> imageNames;
-  final List<ImageContext?> imageContexts;
+  final List<ImageEntry> images;
+  final ImageDataCache cache;
   final int initialIndex;
   final VoidCallback? onEscape;
-  final String? bookIdentifier;
-  final Function(int)? onIndexChanged; // 新增：索引变化回调
+  final ValueChanged<int>? onIndexChanged;
 
   const ImageGalleryWidget({
     super.key,
     required this.images,
-    required this.imageNames,
-    required this.imageContexts,
+    required this.cache,
     required this.initialIndex,
     this.onEscape,
-    this.bookIdentifier,
     this.onIndexChanged,
   });
 
@@ -33,20 +33,8 @@ class ImageGalleryWidget extends StatefulWidget {
 class _ImageGalleryWidgetState extends State<ImageGalleryWidget> {
   late ExtendedPageController _pageController;
   late int _currentIndex;
-  final Set<int> _preloadedImages = <int>{};
-  final ScrollController _contextScrollController = ScrollController();
-  final GlobalKey _imageMarkerKey = GlobalKey();
-  final GlobalKey _contextViewportKey = GlobalKey();
-  bool _isImageMarkerOutOfView = false;
-  bool _isRestoringImageMarker = false;
-
-  ImageContext? get _currentImageContext {
-    if (_currentIndex < 0 || _currentIndex >= widget.imageContexts.length) {
-      return null;
-    }
-    final context = widget.imageContexts[_currentIndex];
-    return context?.hasContent ?? false ? context : null;
-  }
+  ImageContext? get _currentImageContext =>
+      widget.images[_currentIndex].context;
 
   // 缓存控制器和焦点节点，避免每次 build 都创建新实例
   late final FlyoutController _flyoutController;
@@ -59,139 +47,55 @@ class _ImageGalleryWidgetState extends State<ImageGalleryWidget> {
     _pageController = ExtendedPageController(initialPage: _currentIndex);
     _flyoutController = FlyoutController();
     _focusNode = FocusNode();
-    _contextScrollController.addListener(_updateImageMarkerVisibility);
-    // 预加载当前图片和前后一张图片
+    // 当前图片由可见组件加载；这里只预加载邻近图片。
     _preloadImages(_currentIndex);
-    _scrollContextToImageMarker();
   }
 
   @override
   void dispose() {
     _pageController.dispose();
-    _contextScrollController.removeListener(_updateImageMarkerVisibility);
-    _contextScrollController.dispose();
+    _flyoutController.dispose();
     _focusNode.dispose();
     super.dispose();
   }
 
-  /// 预加载当前图片和前后一张图片
+  int _preloadGeneration = 0;
   void _preloadImages(int currentIndex) {
-    // 预加载当前图片
-    if (currentIndex >= 0 && currentIndex < widget.images.length) {
-      _preloadImage(currentIndex);
-    }
-
-    // 预加载前一张图片
-    if (currentIndex - 1 >= 0) {
-      _preloadImage(currentIndex - 1);
-    }
-
-    // 预加载后一张图片
-    if (currentIndex + 1 < widget.images.length) {
-      _preloadImage(currentIndex + 1);
-    }
-  }
-
-  /// 预加载单张图片
-  void _preloadImage(int index) {
-    if (_preloadedImages.contains(index)) return;
-
-    _preloadedImages.add(index);
-
-    // 在后台预创建ExtendedImage widget来触发预加载
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-
-      // 创建一个不可见的ExtendedImage来预加载
-      final preloadWidget = ExtendedImage.memory(
-        widget.images[index],
-        fit: BoxFit.contain,
-        mode: ExtendedImageMode.gesture,
-        width: 1,
-        height: 1,
-        loadStateChanged: (state) {
-          if (state.extendedImageLoadState == LoadState.completed) {
-            debugPrint('预加载图片完成: ${widget.imageNames[index]}');
+    final generation = ++_preloadGeneration;
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      for (final index in [currentIndex - 1, currentIndex + 1]) {
+        if (!mounted || generation != _preloadGeneration) return;
+        if (index < 0 || index >= widget.images.length) continue;
+        try {
+          final image = widget.images[index];
+          final bytes = await widget.cache.read(image);
+          if (!mounted || generation != _preloadGeneration) return;
+          final provider = EpubImage.buildImage(bytes, image).image;
+          final status = await provider.obtainCacheStatus(
+            configuration: createLocalImageConfiguration(context),
+          );
+          if (!mounted || generation != _preloadGeneration) return;
+          if (status == null ||
+              (!status.pending && !status.keepAlive && !status.live)) {
+            await precacheImage(provider, context);
           }
-          return null;
-        },
-      );
-
-      // 触发图片加载
-      precacheImage(preloadWidget.image, context);
+        } catch (error) {
+          debugPrint('预加载失败: $error');
+        }
+      }
     });
   }
 
   void _onPageChanged(int index) {
-    setState(() {
-      _currentIndex = index;
-      _isImageMarkerOutOfView = false;
-      _isRestoringImageMarker = true;
-    });
-    // 当页面改变时，预加载新的前后图片
+    setState(() => _currentIndex = index);
     _preloadImages(index);
-    _scrollContextToImageMarker();
-
-    // 通知外部索引变化
     widget.onIndexChanged?.call(index);
   }
 
-  void _scrollContextToImageMarker() {
-    if (mounted) {
-      setState(() {
-        _isRestoringImageMarker = true;
-        _isImageMarkerOutOfView = false;
-      });
-    }
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      final markerContext = _imageMarkerKey.currentContext;
-      if (!mounted || markerContext == null) {
-        _finishImageMarkerRestoration();
-        return;
-      }
-      Scrollable.ensureVisible(
-        markerContext,
-        duration: const Duration(milliseconds: 180),
-        alignment: 0.35,
-        curve: Curves.easeOut,
-      ).whenComplete(_finishImageMarkerRestoration);
-    });
-  }
-
-  void _finishImageMarkerRestoration() {
-    if (!mounted) return;
-    _isRestoringImageMarker = false;
-    _updateImageMarkerVisibility();
-  }
-
-  void _updateImageMarkerVisibility() {
-    if (!mounted || _isRestoringImageMarker) return;
-    final marker = _imageMarkerKey.currentContext?.findRenderObject();
-    final viewport = _contextViewportKey.currentContext?.findRenderObject();
-    if (marker is! RenderBox || viewport is! RenderBox) {
-      if (_isImageMarkerOutOfView) {
-        setState(() => _isImageMarkerOutOfView = false);
-      }
-      return;
-    }
-
-    final markerTop = marker.localToGlobal(Offset.zero).dy;
-    final markerBottom = markerTop + marker.size.height;
-    final viewportTop = viewport.localToGlobal(Offset.zero).dy;
-    final viewportBottom = viewportTop + viewport.size.height;
-    final isOutOfView = !ScrollVisibility.isFullyVisible(
-      itemTop: markerTop,
-      itemBottom: markerBottom,
-      viewportTop: viewportTop,
-      viewportBottom: viewportBottom,
-    );
-    if (_isImageMarkerOutOfView != isOutOfView) {
-      setState(() => _isImageMarkerOutOfView = isOutOfView);
-    }
-  }
-
   KeyEventResult _handleGalleryKeyEvent(FocusNode node, KeyEvent event) {
-    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    if (event is! KeyDownEvent && event is! KeyRepeatEvent) {
+      return KeyEventResult.ignored;
+    }
     if (event.logicalKey == LogicalKeyboardKey.escape) {
       widget.onEscape?.call();
       return KeyEventResult.handled;
@@ -211,152 +115,71 @@ class _ImageGalleryWidgetState extends State<ImageGalleryWidget> {
     return KeyEventResult.ignored;
   }
 
-  void _previousImage() {
-    if (_currentIndex > 0) {
-      _currentIndex--;
-      _pageController.animateToPage(
-        _currentIndex,
-        duration: const Duration(milliseconds: 80),
-        curve: Curves.easeInOut,
-      );
-      // 通知外部索引变化
-      widget.onIndexChanged?.call(_currentIndex);
-    }
+  void _previousImage() => _navigate(-1);
+  void _nextImage() => _navigate(1);
+  void _navigate(int delta) {
+    final index = (_currentIndex + delta).clamp(0, widget.images.length - 1);
+    if (index == _currentIndex) return;
+    // 键盘/滚轮直接切页，避免连续输入与动画完成回调竞争。
+    _currentIndex = index;
+    _pageController.jumpToPage(index);
   }
 
-  void _nextImage() {
-    if (_currentIndex < widget.images.length - 1) {
-      _currentIndex++;
-      _pageController.animateToPage(
-        _currentIndex,
-        duration: const Duration(milliseconds: 80),
-        curve: Curves.easeInOut,
-      );
-      // 通知外部索引变化
-      widget.onIndexChanged?.call(_currentIndex);
-    }
-  }
+  Future<void> _openInSystemViewer() => _performImageAction(
+    '打开失败',
+    (image, bytes) => SystemViewerService.openImageInSystemViewer(
+      bytes,
+      image.name,
+      image.id,
+    ),
+  );
+  Future<void> _copyToClipboard(String imageName) =>
+      _performImageAction('复制失败', (image, bytes) async {
+        await SystemViewerService.copyFileToClipboard(
+          bytes,
+          image.name,
+          image.id,
+        );
+        if (mounted) {
+          _showInfo('成功', '图片 "$imageName" 已复制到剪贴板', InfoBarSeverity.success);
+        }
+      });
+  Future<void> _openWithDialog(String imageName) => _performImageAction(
+    '打开失败',
+    (image, bytes) =>
+        SystemViewerService.openImageWithDialog(bytes, image.name, image.id),
+  );
 
-  Future<void> _openInSystemViewer() async {
-    if (_currentIndex >= widget.images.length) return;
-
-    await SystemViewerService.openImageInSystemViewer(
-      widget.images[_currentIndex],
-      widget.imageNames[_currentIndex],
-      widget.bookIdentifier,
-    );
-  }
-
-  /// 复制当前图片到剪贴板
-  Future<void> _copyToClipboard(String imageName) async {
-    if (_currentIndex >= widget.images.length) return;
-
+  Future<void> _performImageAction(
+    String title,
+    Future<void> Function(ImageEntry, Uint8List) action,
+  ) async {
+    final image = widget.images[_currentIndex];
     try {
-      await SystemViewerService.copyFileToClipboard(
-        widget.images[_currentIndex],
-        imageName,
-        widget.bookIdentifier,
-      );
-
-      // 显示成功提示
-      if (mounted) {
-        displayInfoBar(
-          context,
-          builder: (context, close) {
-            return InfoBar(
-              title: const Text('成功'),
-              content: Text('图片 "$imageName" 已复制到剪贴板'),
-              severity: InfoBarSeverity.success,
-              action: IconButton(
-                icon: const Icon(FluentIcons.clear),
-                onPressed: close,
-              ),
-            );
-          },
-        );
-      }
-    } catch (e) {
-      // 显示错误提示
-      if (mounted) {
-        displayInfoBar(
-          context,
-          builder: (context, close) {
-            return InfoBar(
-              title: const Text('复制失败'),
-              content: Text('无法复制图片到剪贴板: $e'),
-              severity: InfoBarSeverity.error,
-              action: IconButton(
-                icon: const Icon(FluentIcons.clear),
-                onPressed: close,
-              ),
-            );
-          },
-        );
-      }
+      final bytes = await widget.cache.read(image);
+      if (mounted) await action(image, bytes);
+    } catch (error) {
+      if (mounted) _showInfo(title, '$error', InfoBarSeverity.error);
     }
   }
 
-  /// 显示选择打开方式对话框
-  Future<void> _openWithDialog(String imageName) async {
-    if (_currentIndex >= widget.images.length) return;
-
-    try {
-      await SystemViewerService.openImageWithDialog(
-        widget.images[_currentIndex],
-        imageName,
-        widget.bookIdentifier,
-      );
-    } catch (e) {
-      // 显示错误提示
-      if (mounted) {
-        displayInfoBar(
-          context,
-          builder: (context, close) {
-            return InfoBar(
-              title: const Text('打开失败'),
-              content: Text('无法打开选择应用程序对话框: $e'),
-              severity: InfoBarSeverity.error,
-              action: IconButton(
-                icon: const Icon(FluentIcons.clear),
-                onPressed: close,
-              ),
-            );
-          },
-        );
-      }
-    }
-  }
-
-  /// 构建手势配置（缓存以避免重复创建）
-  static GestureConfig _buildGestureConfig(ExtendedImageState state) {
-    return GestureConfig(
-      // 启用缩放功能
-      minScale: 0.8,
-      animationMinScale: 0.8,
-      maxScale: 5.0,
-      animationMaxScale: 5.0,
-      speed: 1.0,
-      inertialSpeed: 100.0,
-      initialScale: 1.0,
-      inPageView: true,
-      initialAlignment: InitialAlignment.center,
+  void _showInfo(String title, String message, InfoBarSeverity severity) {
+    displayInfoBar(
+      context,
+      builder: (context, close) => InfoBar(
+        title: Text(title),
+        content: Text(message),
+        severity: severity,
+        action: IconButton(
+          icon: const Icon(FluentIcons.clear),
+          onPressed: close,
+        ),
+      ),
     );
-  }
-
-  /// 构建加载状态组件（使用 const 优化）
-  static Widget? _buildLoadStateWidget(ExtendedImageState state) {
-    switch (state.extendedImageLoadState) {
-      case LoadState.loading:
-        return const Center(child: ProgressRing());
-      case LoadState.completed:
-        return null;
-      case LoadState.failed:
-        return const Center(child: Icon(FluentIcons.error, size: 48));
-    }
   }
 
   List<MenuFlyoutItemBase> _buildContextMenuItems() {
-    final String currentImageName = widget.imageNames[_currentIndex];
+    final String currentImageName = widget.images[_currentIndex].name;
 
     return [
       MenuFlyoutItem(
@@ -388,125 +211,6 @@ class _ImageGalleryWidgetState extends State<ImageGalleryWidget> {
         onPressed: null, // 禁用状态，仅显示信息
       ),
     ];
-  }
-
-  Widget _buildImageContextPanel(ImageContext imageContext) {
-    return Container(
-      width: 300,
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: FluentTheme.of(context).micaBackgroundColor,
-        border: Border(
-          left: BorderSide(color: Colors.grey.withValues(alpha: 0.3)),
-        ),
-      ),
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Row(
-                children: [
-                  const Icon(FluentIcons.info, size: 16),
-                  const SizedBox(width: 8),
-                  Text(
-                    '图片上下文',
-                    style: FluentTheme.of(context).typography.subtitle,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Text(
-                '第 ${imageContext.chapterOrder} 节 · ${imageContext.chapterTitle}',
-                style: FluentTheme.of(context).typography.caption,
-              ),
-              const SizedBox(height: 12),
-              Expanded(
-                child: SingleChildScrollView(
-                  key: _contextViewportKey,
-                  controller: _contextScrollController,
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      if (imageContext.textBeforeImage.isNotEmpty)
-                        SelectableText(
-                          imageContext.textBeforeImage,
-                          style: FluentTheme.of(context).typography.body,
-                        ),
-                      if (imageContext.textBeforeImage.isNotEmpty)
-                        const SizedBox(height: 16),
-                      Container(
-                        key: _imageMarkerKey,
-                        width: double.infinity,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 8,
-                        ),
-                        decoration: BoxDecoration(
-                          color: FluentTheme.of(
-                            context,
-                          ).accentColor.withValues(alpha: 0.12),
-                          borderRadius: BorderRadius.circular(4),
-                          border: Border.all(
-                            color: FluentTheme.of(
-                              context,
-                            ).accentColor.withValues(alpha: 0.45),
-                          ),
-                        ),
-                        child: Row(
-                          children: [
-                            Icon(
-                              FluentIcons.photo2,
-                              size: 14,
-                              color: FluentTheme.of(context).accentColor,
-                            ),
-                            const SizedBox(width: 8),
-                            const Text('图片原文位置'),
-                          ],
-                        ),
-                      ),
-                      if (imageContext.textAfterImage.isNotEmpty)
-                        const SizedBox(height: 16),
-                      if (imageContext.textAfterImage.isNotEmpty)
-                        SelectableText(
-                          imageContext.textAfterImage,
-                          style: FluentTheme.of(context).typography.body,
-                        ),
-                    ],
-                  ),
-                ),
-              ),
-            ],
-          ),
-          if (_isImageMarkerOutOfView)
-            Positioned(
-              right: 12,
-              bottom: 12,
-              child: Tooltip(
-                message: '回到图片原文位置',
-                child: Container(
-                  decoration: BoxDecoration(
-                    color: FluentTheme.of(context).accentColor,
-                    shape: BoxShape.circle,
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.2),
-                        blurRadius: 8,
-                        offset: const Offset(0, 2),
-                      ),
-                    ],
-                  ),
-                  child: IconButton(
-                    icon: const Icon(FluentIcons.photo2, color: Colors.white),
-                    onPressed: _scrollContextToImageMarker,
-                  ),
-                ),
-              ),
-            ),
-        ],
-      ),
-    );
   }
 
   @override
@@ -574,12 +278,10 @@ class _ImageGalleryWidgetState extends State<ImageGalleryWidget> {
                         scrollDirection: Axis.horizontal,
                         physics: const BouncingScrollPhysics(),
                         itemBuilder: (BuildContext context, int index) {
-                          return ExtendedImage.memory(
-                            widget.images[index],
-                            fit: BoxFit.contain,
-                            mode: ExtendedImageMode.gesture,
-                            initGestureConfigHandler: _buildGestureConfig,
-                            loadStateChanged: _buildLoadStateWidget,
+                          return EpubImage(
+                            key: ValueKey(widget.images[index].id),
+                            image: widget.images[index],
+                            cache: widget.cache,
                           );
                         },
                       ),
@@ -587,8 +289,11 @@ class _ImageGalleryWidgetState extends State<ImageGalleryWidget> {
                   ),
                 ),
               ),
-              if (_currentImageContext != null)
-                _buildImageContextPanel(_currentImageContext!),
+              if (_currentImageContext?.hasContent ?? false)
+                ImageContextPanel(
+                  key: ValueKey(widget.images[_currentIndex].id),
+                  imageContext: _currentImageContext!,
+                ),
             ],
           ),
         ),
